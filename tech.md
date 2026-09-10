@@ -3,9 +3,9 @@
 | Field | Value |
 |---|---|
 | Project | **Unified-App-Infra** (self-hosted BaaS / auth hub / multi-DB router) |
-| Blueprint version | **v0.1.0** |
+| Blueprint version | **v0.2.0** |
 | Last updated | 2026-09-10 |
-| Status | Phase 1 in progress — T1.1 done |
+| Status | Phases 1–4 implemented except T1.7 (migration chưa chạy lên Neon) |
 | Owner | Khoi Hoang (johnny.khoihoang@gmail.com) |
 | Master DB provider | **Neon PostgreSQL** (free tier) |
 
@@ -661,11 +661,17 @@ không chạy nửa vời.
 | Tool | Version thực tế |
 |---|---|
 | Node | v22.23.2 |
-| pnpm | 9.12.0 (qua corepack) |
+| pnpm | 9.12.0 (qua corepack — nhớ `export PATH="$HOME/.local/bin:$PATH"`) |
 | TypeScript | 7.0.2 |
 | Turborepo | 2.10.12 |
 | Vitest | 5.0.0 |
+| Next.js | 16.3.4 (React 19.2.8) |
+| Better Auth | 1.7.4 |
+| Drizzle ORM | 0.45.2 (drizzle-kit 0.31.10) |
 | Git | 2.34.1 |
+
+**Trạng thái build/test gần nhất:** `pnpm build` 6/6 package PASS · `pnpm test` **95 test PASS**
+(core 37 · adapters 30 · sdk 12 · db 8 · web 8).
 
 ---
 
@@ -679,4 +685,8 @@ không chạy nửa vời.
 | ADR-004 | SHA-256 cho API key (không bcrypt) | Khoá có entropy cao (144 bit) nên không cần chống brute-force chậm; SHA-256 cho phép index lookup O(1). | 2026-09-10 |
 | ADR-005 | SDK trả `Result` thay vì throw | Ergonomics kiểu Supabase, ép child app xử lý lỗi tường minh. | 2026-09-10 |
 | ADR-006 | Chỉ nhận query tham số hoá qua `/api/v1/query` | Bề mặt tấn công nhỏ nhất mà vẫn linh hoạt; không cần dựng REST resource cho từng bảng. | 2026-09-10 |
-| ADR-007 | Package dùng ESM (`"type": "module"`) + `moduleResolution: Bundler` | Next.js và Vitest đều là bundler; tránh phải viết đuôi `.js` trong import nội bộ. | 2026-09-10 |
+| ADR-007 | Package dùng ESM (`"type": "module"`) + `moduleResolution: Bundler` | Next.js và Vitest đều là bundler; import nội bộ trong `packages/*` viết kèm `.js`, còn trong `apps/web` viết không đuôi (bundler của Next không map `.js` → `.ts`). | 2026-09-10 |
+| ADR-008 | Dùng **Next.js 16.3.4** thay vì Next.js 15 như spec ban đầu | `create-next-app@latest` cài bản ổn định hiện hành (16.3.4 + React 19.2.8); hạ xuống 15 sẽ khoá dự án vào nhánh cũ, mất bản vá bảo mật. App Router / Server Actions / Route Handlers dùng y hệt. Đổi lại nếu Khoi yêu cầu. | 2026-09-10 |
+| ADR-009 | Mọi truy vấn Drizzle nằm trong `@infra/db`, `@infra/auth` chỉ re-export | pnpm resolve `drizzle-orm` thành hai instance khác nhau (peer khác nhau vì `@libsql/client`), gây lỗi type khi hai package cùng gọi Drizzle. Gom về một chỗ vừa sửa lỗi vừa đúng kiến trúc. | 2026-09-10 |
+| ADR-010 | Scope của `/api/v1/query` suy ra từ **câu lệnh**, không từ tham số client | Client tự khai "đây là read" thì vô nghĩa; `sqlIntent()` đọc từ khoá đầu câu (bỏ comment) nên khoá `db:read` không thể ghi dữ liệu. | 2026-09-10 |
+| ADR-011 | Rate limit lưu trong bộ nhớ tiến trình | Nền tảng self-host chạy một instance; đủ dùng và không cần thêm Redis. Nếu scale ngang thì thay bằng store dùng chung. | 2026-09-10 |

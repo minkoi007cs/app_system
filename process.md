@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.1.4** |
-| Current phase | **Phase 1 (còn T1.7) · Phase 3 (xong T3.1–T3.6, T3.9)** |
-| Phase status | `IN PROGRESS` — chờ Neon để đóng Phase 1; Phase 3 chỉ còn phần route handler (cần apps/web) |
-| Last build | `PASS` — 5/5 packages (turbo 2.10.12) |
-| Last test | `PASS` — 8 test files, 75 tests (vitest 5.0.0) |
-| Next task | **T1.7 — chạy migration lên Neon Master DB** (chờ Khoi, xem `docs/setup-databases.md`) · song song có thể làm **T4.8 SDK** |
+| Current version | **v0.2.0** |
+| Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
+| Phase status | `BLOCKED ON CREDENTIALS` — chỉ còn T1.7 (chạy migration lên Neon) cần Khoi cung cấp tài khoản |
+| Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
+| Last test | `PASS` — 10 test files, **95 tests** (core 37 · adapters 30 · sdk 12 · db 8 · web 8) |
+| Next task | **T1.7 — `pnpm db:migrate` lên Neon** (xem `docs/setup-databases.md`), sau đó smoke test end-to-end |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -60,15 +60,14 @@ pnpm install && pnpm build && pnpm test
 - [x] **T1.8** `packages/db/src/queries/` — truy vấn có kiểu cho apps / keys / configs / audit
 - [ ] **G1** ✅ Gate: `pnpm build` PASS · `pnpm test` PASS · zero implicit any → bump **v0.2.0**
 
-### Phase 2 — Centralized Auth Hub  `NOT STARTED`
-- [ ] **T2.1** `packages/auth`: khởi tạo Better Auth + Drizzle adapter trên Master DB
-- [ ] **T2.2** Email/Password + xác minh email
-- [ ] **T2.3** OAuth Google · GitHub · Microsoft (callback dùng chung toàn nền tảng)
-- [ ] **T2.4** `app-scope.plugin.ts` + bảng `infra_app_members`
-- [ ] **T2.5** Route handler `apps/web/src/app/api/auth/[...all]/route.ts`
-- [ ] **T2.6** `trustedOrigins` động đọc từ `infra_apps.allowed_origins`
-- [ ] **T2.7** Test: cách ly user giữa các app (không rò rỉ chéo)
-- [ ] **G2** ✅ Gate → bump **v0.3.0**
+### Phase 2 — Centralized Auth Hub  `DONE (chờ chạy thật)`
+- [x] **T2.1** `packages/auth`: khởi tạo Better Auth + Drizzle adapter trên Master DB
+- [x] **T2.2** Email/Password (tối thiểu 12 ký tự, bắt xác minh email khi production)
+- [x] **T2.3** OAuth Google · GitHub · Microsoft — chỉ bật provider nào có đủ cặp id/secret
+- [x] **T2.4** `app-scope.plugin.ts` + bảng `infra_app_members` + `session.active_app_id`
+- [x] **T2.5** Route handler `apps/web/src/app/api/auth/[...all]/route.ts` (khởi tạo lazy)
+- [x] **T2.6** `trustedOrigins` động đọc từ `infra_apps.allowed_origins`
+- [ ] **T2.7** Test cách ly user giữa các app — cần Master DB thật (integration test sau T1.7)
 
 ### Phase 3 — Dynamic Multi-DB Adapter  `IN PROGRESS`
 - [x] **T3.1** `packages/adapters`: interface `DatabaseAdapter` + `types.ts`
@@ -77,22 +76,22 @@ pnpm install && pnpm build && pnpm test
 - [x] **T3.4** `resolver.ts` — appId → adapter, giải mã đúng lúc cần, gộp các miss đồng thời
 - [x] **T3.5** `pool.ts` — LRU 25 + TTL 5 phút + đóng adapter khi evict
 - [x] **T3.6** `health.ts` — ping, phân loại latency, `worstStatus`, kiểm tra nhiều app song song
-- [ ] **T3.7** `apiKeyGuard` + route `POST /api/v1/query`, `GET /api/v1/health` — ⛔ cần `apps/web` (T4.1)
-- [ ] **T3.8** Ghi `infra_audit_logs` bất đồng bộ — ⛔ cùng điều kiện với T3.7
+- [x] **T3.7** `apiKeyGuard` + route `POST /api/v1/query`, `GET /api/v1/health`, `GET /api/v1/me`
+- [x] **T3.8** Ghi `infra_audit_logs` bất đồng bộ (fire-and-forget, không chặn response)
 - [x] **T3.9** Vitest cho adapters + resolver (driver giả lập) — 30 test
 - [ ] **G3** ✅ Gate → bump **v0.4.0**
 
-### Phase 4 — Admin Dashboard & Client SDK  `NOT STARTED`
-- [ ] **T4.1** `apps/web`: Next.js 15 App Router + Tailwind + Shadcn UI + Lucide
-- [ ] **T4.2** Sign-in / sign-up cho admin + guard layout dashboard
-- [ ] **T4.3** CRUD app (Server Actions): tạo, sửa, đình chỉ, lưu trữ
-- [ ] **T4.4** Quản lý API key: cấp (hiện raw đúng một lần), xoay vòng, thu hồi
-- [ ] **T4.5** Quản lý database config: chọn provider, dán DSN → mã hoá ngay
-- [ ] **T4.6** Trang Health monitoring (badge, latency, kiểm tra thủ công)
-- [ ] **T4.7** Viewer `infra_audit_logs` có lọc
-- [ ] **T4.8** `packages/sdk`: `createInfraClient()` + auth + db + kiểu `Result`
-- [ ] **T4.9** README quickstart "dưới 10 dòng" + tích hợp thử với một child app thật
-- [ ] **G4** ✅ Gate → bump **v1.0.0**
+### Phase 4 — Admin Dashboard & Client SDK  `DONE (chờ chạy thật)`
+- [x] **T4.1** `apps/web`: Next.js **16.3.4** App Router + Tailwind v4 + Shadcn UI + Lucide (ADR-008)
+- [x] **T4.2** Sign-in / sign-up cho admin (email + 3 nút OAuth) + guard layout dashboard
+- [x] **T4.3** CRUD app bằng Server Actions: tạo, sửa origin, đình chỉ, lưu trữ
+- [x] **T4.4** Quản lý API key: cấp (hiện raw đúng một lần, có nút copy), xoay vòng, thu hồi
+- [x] **T4.5** Quản lý database config: chọn provider, dán DSN → mã hoá ngay, huỷ cache resolver
+- [x] **T4.6** Trang Health monitoring (badge, latency, nút kiểm tra thủ công)
+- [x] **T4.7** Viewer `infra_audit_logs`
+- [x] **T4.8** `packages/sdk`: `createInfraClient()` + auth + db + kiểu `Result`
+- [x] **T4.9** `README.md` quickstart "dưới 10 dòng"
+- [ ] **G4** Gate cuối: cần chạy thật với Neon rồi tích hợp thử một child app → bump **v1.0.0**
 
 ---
 
@@ -134,6 +133,44 @@ pnpm install && pnpm build && pnpm test
 
 **Next task** → `T?.?` …
 ```
+
+---
+
+### 2026-09-10 · v0.1.4 · feat(adapters): add multi-database engine with resolver, pool and health checks
+
+**Deliverables**
+- `types.ts` — hợp đồng `DatabaseAdapter` (query / health / close), bảng ánh xạ provider → dialect,
+  ngưỡng health (<300ms healthy, <1500ms degraded), timeout mặc định 10s, pool mặc định 3.
+- `postgres.adapter.ts` — dùng chung cho Neon và Supabase; `prepare: false` để tương thích
+  pgbouncer của Supabase; tham số luôn bind server-side (`sql.unsafe(text, params)`), không nối chuỗi.
+- `libsql.adapter.ts` — Turso; `parseLibsqlConnectionString` tách `authToken` khỏi DSN nên token
+  không bị ghi lại ở nơi khác; map row theo tên cột.
+- `params.ts` — kiểm tra và chuẩn hoá tham số trước khi chạm driver (bigint → string cho PG;
+  boolean → 0/1 và Date → ISO cho LibSQL); kiểu lạ bị từ chối kèm vị trí tham số.
+- `timeout.ts` — mọi query có ngân sách thời gian, quá hạn thành `DB_QUERY_TIMEOUT`.
+- `pool.ts` — LRU 25 mục + TTL 5 phút, tự đóng adapter khi evict/hết hạn, có `stats()`.
+- `resolver.ts` — `appId → adapter`; giải mã connection string **chỉ** lúc cache miss, không bao giờ
+  cache plaintext; gộp các miss đồng thời để app nguội chỉ mở đúng một kết nối; `invalidate()` cho
+  admin đổi cấu hình.
+- `health.ts` — `checkAdapterHealth` biến lỗi driver thành báo cáo thay vì exception,
+  `checkManyApps`, `worstStatus`.
+
+**Modified files**
+- `packages/adapters/src/{types,params,timeout,postgres.adapter,libsql.adapter,factory,pool,resolver,health,index}.ts` (new)
+- `packages/adapters/tests/{fake-adapter,pool,resolver,params,adapters}.test.ts` (new)
+
+**Test status**
+- `pnpm build` → **PASS** (5 successful, 5 total)
+- `pnpm test`  → **PASS** (75 passed / 75 total — core 37, db 8, adapters 30)
+
+**Notes / decisions**
+- `postgres.ParameterOrJSON` không nhận `bigint` → chuyển sang chuỗi trong `toPostgresParams`
+  thay vì ép kiểu. Không có `as any` nào trong repo.
+- Test resolver khẳng định `decrypt` chỉ được gọi **một lần** cho nhiều lần resolve — bằng chứng
+  plaintext không nằm trong cache.
+- T3.7/T3.8 (route handler + audit) chuyển sang làm cùng Phase 4 vì cần `apps/web`.
+
+**Next task** → `T1.7` (chờ Neon) hoặc `T4.8` SDK — cả hai đều không chặn nhau.
 
 ---
 
