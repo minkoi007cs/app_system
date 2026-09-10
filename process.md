@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.1.3** |
-| Current phase | **Phase 1 — Foundation, Security & Master DB Setup** |
-| Phase status | `IN PROGRESS` — T1.1→T1.6 + T1.8 xong; chỉ còn T1.7 |
-| Last build | `PASS` — 6/6 tasks (turbo 2.10.12) |
-| Last test | `PASS` — 4 test files, 45 tests (vitest 5.0.0) |
-| Next task | **T1.7 — chạy migration lên Neon Master DB** (chờ Khoi tạo tài khoản Neon, xem `docs/setup-databases.md`) |
+| Current version | **v0.1.4** |
+| Current phase | **Phase 1 (còn T1.7) · Phase 3 (xong T3.1–T3.6, T3.9)** |
+| Phase status | `IN PROGRESS` — chờ Neon để đóng Phase 1; Phase 3 chỉ còn phần route handler (cần apps/web) |
+| Last build | `PASS` — 5/5 packages (turbo 2.10.12) |
+| Last test | `PASS` — 8 test files, 75 tests (vitest 5.0.0) |
+| Next task | **T1.7 — chạy migration lên Neon Master DB** (chờ Khoi, xem `docs/setup-databases.md`) · song song có thể làm **T4.8 SDK** |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -70,16 +70,16 @@ pnpm install && pnpm build && pnpm test
 - [ ] **T2.7** Test: cách ly user giữa các app (không rò rỉ chéo)
 - [ ] **G2** ✅ Gate → bump **v0.3.0**
 
-### Phase 3 — Dynamic Multi-DB Adapter  `NOT STARTED`
-- [ ] **T3.1** `packages/adapters`: interface `DatabaseAdapter` + `types.ts`
-- [ ] **T3.2** `postgres.adapter.ts` (Neon + Supabase qua `postgres-js`)
-- [ ] **T3.3** `libsql.adapter.ts` (Turso qua `@libsql/client`)
-- [ ] **T3.4** `resolver.ts` — appId → adapter, giải mã connection string đúng lúc cần
-- [ ] **T3.5** `pool.ts` — LRU 25 + TTL 5 phút + idle eviction + an toàn với HMR
-- [ ] **T3.6** `health.ts` — ping, phân loại latency, ghi ngược vào `infra_database_configs`
-- [ ] **T3.7** `apiKeyGuard` + route `POST /api/v1/query`, `GET /api/v1/health`
-- [ ] **T3.8** Ghi `infra_audit_logs` bất đồng bộ (không chặn response)
-- [ ] **T3.9** Vitest cho adapters + resolver (driver giả lập)
+### Phase 3 — Dynamic Multi-DB Adapter  `IN PROGRESS`
+- [x] **T3.1** `packages/adapters`: interface `DatabaseAdapter` + `types.ts`
+- [x] **T3.2** `postgres.adapter.ts` (Neon + Supabase qua `postgres-js`, `prepare: false` cho pooler)
+- [x] **T3.3** `libsql.adapter.ts` (Turso qua `@libsql/client`, tách authToken khỏi DSN)
+- [x] **T3.4** `resolver.ts` — appId → adapter, giải mã đúng lúc cần, gộp các miss đồng thời
+- [x] **T3.5** `pool.ts` — LRU 25 + TTL 5 phút + đóng adapter khi evict
+- [x] **T3.6** `health.ts` — ping, phân loại latency, `worstStatus`, kiểm tra nhiều app song song
+- [ ] **T3.7** `apiKeyGuard` + route `POST /api/v1/query`, `GET /api/v1/health` — ⛔ cần `apps/web` (T4.1)
+- [ ] **T3.8** Ghi `infra_audit_logs` bất đồng bộ — ⛔ cùng điều kiện với T3.7
+- [x] **T3.9** Vitest cho adapters + resolver (driver giả lập) — 30 test
 - [ ] **G3** ✅ Gate → bump **v0.4.0**
 
 ### Phase 4 — Admin Dashboard & Client SDK  `NOT STARTED`
@@ -134,6 +134,76 @@ pnpm install && pnpm build && pnpm test
 
 **Next task** → `T?.?` …
 ```
+
+---
+
+### 2026-09-10 · v0.1.3 · feat(db): add master db schema, client and typed queries
+
+**Deliverables**
+- Schema Drizzle đầy đủ, 9 bảng: `infra_apps`, `infra_api_keys`, `infra_database_configs`,
+  `infra_audit_logs`, `infra_app_members`, + `user` / `session` / `account` / `verification`
+  của Better Auth. `session.active_app_id` sẵn cho app scoping ở Phase 2.
+- `client.ts` — pool postgres-js singleton giữ trên `globalThis` (an toàn với HMR), `max: 5`,
+  `prepare: false` để tương thích pgbouncer.
+- `queries/apps.ts` — tạo app, kiểm slug, lấy theo id/slug, đổi trạng thái, gom `trustedOrigins`.
+- `queries/api-keys.ts` — cấp khoá (raw trả về đúng một lần), `verifyApiKey` (format → tra hash →
+  revoked → expired → app active), rotate, revoke, stamp `last_used_at`.
+- `queries/database-configs.ts` — mã hoá DSN trước khi ghi, `revealConnectionString` giải mã
+  đúng lúc dùng, `hostHintOf` chỉ lấy host (không kèm credential), ghi kết quả health.
+- `queries/audit-logs.ts` — `sqlFingerprint` (hash 16 ký tự thay cho câu SQL), ghi audit
+  fire-and-forget để không chặn request.
+- Migration `0000_tan_random.sql` sinh offline bằng drizzle-kit (9 bảng, 12 index, 8 FK).
+- `docs/setup-databases.md` — hướng dẫn tiếng Việt tạo Neon / Supabase / Turso.
+
+**Modified files**
+- `packages/db/src/schema/{apps,api-keys,database-configs,audit-logs,auth,relations,index}.ts` (new)
+- `packages/db/src/{client,index}.ts` · `packages/db/src/queries/{apps,api-keys,database-configs,audit-logs,index}.ts` (new)
+- `packages/db/drizzle.config.ts` · `packages/db/migrations/0000_tan_random.sql` (new)
+- `packages/db/tests/queries.test.ts` (new)
+- `docs/setup-databases.md` (new)
+
+**Test status**
+- `pnpm build` → **PASS** (6 successful, 6 total)
+- `pnpm test`  → **PASS** (45 passed / 45 total — core 37, db 8)
+
+**Notes / decisions**
+- Quan hệ Drizzle gom vào `schema/relations.ts` để các file bảng không import vòng nhau.
+- `drizzle-orm@0.45` dùng dạng **mảng** cho extra config: `(t) => [index(...), uniqueIndex(...)]`.
+- Partial unique index `infra_db_configs_one_primary` đảm bảo mỗi app chỉ có đúng 1 DB primary.
+- Test tầng db chỉ phủ hàm thuần (slug, dialect, host hint, envelope, fingerprint) — phần chạm
+  DB thật để dành cho integration test sau khi có Neon.
+
+**Next task** → `T1.7` Chạy `pnpm db:migrate` lên Neon (chờ Khoi tạo tài khoản).
+
+---
+
+### 2026-09-10 · v0.1.2 · feat(core): add aes-256-gcm crypto, api key and env primitives
+
+**Deliverables**
+- `crypto.ts` — AES-256-GCM: IV 12 bytes ngẫu nhiên mỗi lần, auth tag 16 bytes lưu riêng,
+  AAD `appId:configId` buộc ciphertext vào đúng bản ghi, `keyVersion` sẵn cho xoay khoá.
+  Thông báo lỗi cố tình mơ hồ (sai khoá / sai AAD / bị sửa đều như nhau).
+- `api-key.ts` — sinh `pk_live_` + 32 ký tự base62 (rejection sampling, không lệch phân phối),
+  hash SHA-256, prefix hiển thị 8 ký tự, `maskApiKey`, `hasScope` (admin bao trùm mọi scope),
+  đọc token từ header `Authorization: Bearer`.
+- `env.ts` — schema zod cho toàn bộ biến môi trường; lỗi chỉ nêu **tên biến**, không in giá trị.
+  `configuredOAuthProviders()` cho biết provider nào đã cấu hình đủ cặp id/secret.
+- `errors.ts` — `InfraError` + 19 mã lỗi + ánh xạ HTTP status.
+
+**Modified files**
+- `packages/core/src/{crypto,api-key,env,errors,index}.ts` (new)
+- `packages/core/tests/{crypto,api-key,env}.test.ts` (new), `tests/smoke.test.ts` (delete)
+- `packages/{core,db,adapters,auth}/tsconfig.json` (edit — thêm `"types": ["node"]`)
+- `packages/sdk/tsconfig.json` (edit — `lib: ES2022 + DOM`, không dùng type Node)
+
+**Test status**
+- `pnpm build` → **PASS** (5 successful, 5 total)
+- `pnpm test`  → **PASS** (37 passed / 37 total)
+
+**Notes / decisions**
+- TypeScript 7 **không tự nhận** `@types/node` trong layout pnpm — phải khai báo tường minh
+  `"types": ["node"]` trong tsconfig của từng package dùng API Node. Ghi nhớ cho package mới.
+- Test khẳng định plaintext không xuất hiện trong payload và giá trị env không lọt vào message lỗi.
 
 ---
 

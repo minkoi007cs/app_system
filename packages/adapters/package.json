@@ -23,5 +23,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.2"
+  },
+  "dependencies": {
+    "@infra/core": "workspace:^",
+    "@libsql/client": "^0.18.0",
+    "postgres": "^3.4.9"
   }
 }
