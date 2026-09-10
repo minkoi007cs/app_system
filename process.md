@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.1.1** |
+| Current version | **v0.1.3** |
 | Current phase | **Phase 1 — Foundation, Security & Master DB Setup** |
-| Phase status | `IN PROGRESS` — T1.1 xong |
-| Last build | `PASS` — 5/5 tasks (turbo 2.10.12) |
-| Last test | `PASS` — 1 test file, 1 test (vitest 5.0.0) |
-| Next task | **T1.2 — `packages/core/src/crypto.ts` (AES-256-GCM)** |
+| Phase status | `IN PROGRESS` — T1.1→T1.6 + T1.8 xong; chỉ còn T1.7 |
+| Last build | `PASS` — 6/6 tasks (turbo 2.10.12) |
+| Last test | `PASS` — 4 test files, 45 tests (vitest 5.0.0) |
+| Next task | **T1.7 — chạy migration lên Neon Master DB** (chờ Khoi tạo tài khoản Neon, xem `docs/setup-databases.md`) |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -50,13 +50,14 @@ pnpm install && pnpm build && pnpm test
 
 ### Phase 1 — Foundation, Security & Master DB Setup  `IN PROGRESS`
 - [x] **T1.1** Khởi tạo monorepo (pnpm workspaces + Turborepo + `tsconfig.base.json` strict)
-- [ ] **T1.2** `packages/core`: `crypto.ts` (AES-256-GCM encrypt/decrypt + AAD + key version)
-- [ ] **T1.3** `packages/core`: `api-key.ts` (sinh `pk_live_…`, hash SHA-256, tách prefix)
-- [ ] **T1.4** `packages/core`: `env.ts` (zod), `errors.ts` (InfraError taxonomy)
-- [ ] **T1.5** Vitest cho `core` — crypto round-trip, sai AAD/authTag phải fail, format khoá
-- [ ] **T1.6** `packages/db`: schema Drizzle 4 bảng `infra_*` + bảng Better Auth
-- [ ] **T1.7** `drizzle.config.ts` + migration đầu tiên, đẩy lên Neon Master DB
-- [ ] **T1.8** `packages/db/src/queries/` — truy vấn có kiểu cho apps / keys / configs
+- [x] **T1.2** `packages/core`: `crypto.ts` (AES-256-GCM encrypt/decrypt + AAD + key version)
+- [x] **T1.3** `packages/core`: `api-key.ts` (sinh `pk_live_…`, hash SHA-256, tách prefix)
+- [x] **T1.4** `packages/core`: `env.ts` (zod), `errors.ts` (InfraError taxonomy)
+- [x] **T1.5** Vitest cho `core` — crypto round-trip, sai AAD/authTag phải fail, format khoá
+- [x] **T1.6** `packages/db`: schema Drizzle 4 bảng `infra_*` + bảng Better Auth + `infra_app_members`
+- [ ] **T1.7** Chạy migration `0000` lên Neon Master DB — ⛔ **chờ `INFRA_MASTER_DATABASE_URL`**
+      (file migration đã sinh sẵn offline: `packages/db/migrations/0000_tan_random.sql`, 9 bảng)
+- [x] **T1.8** `packages/db/src/queries/` — truy vấn có kiểu cho apps / keys / configs / audit
 - [ ] **G1** ✅ Gate: `pnpm build` PASS · `pnpm test` PASS · zero implicit any → bump **v0.2.0**
 
 ### Phase 2 — Centralized Auth Hub  `NOT STARTED`
@@ -97,15 +98,17 @@ pnpm install && pnpm build && pnpm test
 
 ## 3. Next Task — chi tiết
 
-> **T1.2 — `packages/core/src/crypto.ts`**
+> **T1.7 — Đưa schema lên Neon Master DB** ⛔ *blocked: cần Khoi tạo tài khoản Neon*
 >
-> - `encryptSecret(plaintext, aad)` → `{ ciphertext, iv, authTag, keyVersion }` (hex).
-> - `decryptSecret(payload, aad)` → plaintext; sai AAD hoặc sai authTag phải **throw**.
-> - `assertMasterKey()` đọc `INFRA_MASTER_ENCRYPTION_KEY`, kiểm đúng 64 ký tự hex, throw sớm.
-> - IV 12 bytes ngẫu nhiên mỗi lần; không tái sử dụng.
-> - Không log plaintext, không đưa plaintext vào thông báo lỗi.
-> - Commit: `feat(core): add aes-256-gcm secret encryption utilities`
-> - Kéo theo T1.5 (test crypto) — nên làm liền ngay sau.
+> Các bước Khoi làm (chi tiết trong `docs/setup-databases.md`, Phần 1):
+> 1. Tạo tài khoản Neon → project `infra-master` → copy connection string.
+> 2. `cp .env.example .env.local`, dán chuỗi vào `INFRA_MASTER_DATABASE_URL`.
+> 3. Sinh `INFRA_MASTER_ENCRYPTION_KEY` (`openssl rand -hex 32`) + `BETTER_AUTH_SECRET`,
+>    **sao lưu khoá mã hoá vào password manager**.
+> 4. `pnpm db:migrate` → tạo 9 bảng; `pnpm db:studio` để xem.
+>
+> Xong bước này → đóng gate **G1**, bump **v0.2.0**, sang Phase 2 (Better Auth).
+> Trong lúc chờ, có thể làm trước Phase 3 (adapters) vì không cần Master DB thật.
 
 ---
 
