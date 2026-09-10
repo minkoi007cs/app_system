@@ -9,3 +9,5 @@ dist
 .DS_Store
 coverage
 *.tsbuildinfo
+.secrets/
+!.secrets/*.example

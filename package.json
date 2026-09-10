@@ -14,9 +14,13 @@
     "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @infra/db exec drizzle-kit generate",
     "db:migrate": "pnpm --filter @infra/db exec drizzle-kit migrate",
-    "db:studio": "pnpm --filter @infra/db exec drizzle-kit studio"
+    "db:studio": "pnpm --filter @infra/db exec drizzle-kit studio",
+    "smoke": "tsx scripts/smoke-multi-provider.mts"
   },
   "devDependencies": {
+    "@infra/adapters": "workspace:^",
+    "@infra/core": "workspace:^",
+    "@infra/db": "workspace:^",
     "@types/node": "^22.20.2",
     "@vitest/coverage-v8": "^5.0.0",
     "tsx": "^4.23.13",
