@@ -1,5 +1,8 @@
 /**
- * @infra/db — Drizzle ORM schema, client and typed queries for the Master DB.
- * Phase 1 · T1.1 scaffold. Implementation lands in later tasks (see process.md).
+ * @infra/db — Drizzle schema, client and typed queries for the Master DB (Neon PostgreSQL).
  */
 export const PACKAGE_NAME = '@infra/db' as const;
+
+export * from './schema/index.js';
+export * from './client.js';
+export * from './queries/index.js';
