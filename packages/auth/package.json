@@ -23,5 +23,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.2"
+  },
+  "dependencies": {
+    "@infra/core": "workspace:^",
+    "@infra/db": "workspace:^",
+    "better-auth": "^1.7.4"
   }
 }
