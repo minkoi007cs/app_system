@@ -12,3 +12,4 @@ coverage
 .secrets/
 !.secrets/*.example
 logs/
+.neon

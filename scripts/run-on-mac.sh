@@ -30,6 +30,23 @@ redact() {
 step() { echo ""; echo "═══ $* ═══"; }
 run()  { echo "\$ $*"; "$@" 2>&1; local rc=$?; echo "  ↳ exit=${rc}"; return ${rc}; }
 
+# Same as run(), but kills anything that sits waiting for input.
+runt() {
+  local limit="$1"; shift
+  echo "\$ $* (timeout ${limit}s)"
+  if command -v gtimeout >/dev/null 2>&1; then gtimeout "${limit}" "$@" 2>&1
+  else
+    "$@" 2>&1 &
+    local pid=$!
+    ( sleep "${limit}"; kill -9 ${pid} 2>/dev/null ) & local watcher=$!
+    wait ${pid} 2>/dev/null
+    kill ${watcher} 2>/dev/null
+  fi
+  local rc=$?
+  echo "  ↳ exit=${rc}"
+  return ${rc}
+}
+
 NEON=()
 
 setup_neon_cli() {
@@ -71,12 +88,12 @@ main() {
   setup_neon_cli || return 1
 
   step "1 · who am I"
-  run "${NEON[@]}" me || { echo "❌ the API key was rejected — create a new one in Account settings → API keys"; return 1; }
+  runt 60 "${NEON[@]}" me || { echo "❌ the API key was rejected — create a new one in Account settings → API keys"; return 1; }
 
-  step "2 · skills";  run "${NEON[@]}" skills -y
-  step "3 · mcp";     run "${NEON[@]}" mcp -y
-  step "4 · link";    run "${NEON[@]}" link --project-id "${PROJECT_ID}" --branch production -y
-  step "5 · config";  run "${NEON[@]}" config init
+  step "2 · skills";  runt 120 "${NEON[@]}" skills -y
+  step "3 · mcp";     runt 120 "${NEON[@]}" mcp -y
+  step "4 · link";    runt 120 "${NEON[@]}" link --project-id "${PROJECT_ID}" --branch production -y
+  step "5 · config";  runt 180 "${NEON[@]}" config init
 
   cat > neon.ts <<'TS'
 import { defineConfig } from "@neon/config/v1";
@@ -85,7 +102,7 @@ export default defineConfig({});
 TS
   echo "neon.ts written"
 
-  step "6 · deploy"; run "${NEON[@]}" deploy
+  step "6 · deploy"; runt 300 "${NEON[@]}" deploy
 
   step "7 · master connection string → .env.local"
   MASTER_URL="$("${NEON[@]}" connection-string production --project-id "${PROJECT_ID}" 2>/dev/null | grep -o 'postgres[^[:space:]]*' | tail -1)"
@@ -116,7 +133,7 @@ PY
       echo "│  SAO LƯU KHOÁ NÀY VÀO PASSWORD MANAGER — CHỈ HIỆN MỘT LẦN    │"
       echo "│  Mất khoá = mất toàn bộ connection string đã mã hoá          │"
       echo "└──────────────────────────────────────────────────────────────┘"
-      echo "INFRA_MASTER_ENCRYPTION_KEY=${ENC_KEY}"
+      echo "INFRA_MASTER_ENCRYPTION_KEY=${ENC_KEY}"   # /dev/tty only, never captured
       echo ""
     } > /dev/tty 2>/dev/null || true
     echo "(encryption key printed on your terminal only — save it now)"
@@ -158,6 +175,11 @@ PY
   step "done"
 }
 
-main 2>&1 | redact | tee "${LOG}"
+RAW="logs/.raw-${STAMP}"
+cleanup() { [[ -f "${RAW}" ]] && { redact < "${RAW}" > "${LOG}"; rm -f "${RAW}"; }; }
+trap cleanup EXIT INT TERM
+
+main 2>&1 | tee "${RAW}"
+cleanup
 echo ""
 echo "Log (đã che secret): ${LOG}"
