@@ -7,7 +7,7 @@
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
 | Last test | `PASS` — 10 test files, **95 tests** (core 37 · adapters 30 · sdk 12 · db 8 · web 8) |
-| Next task | **G4** — chạy `pnpm dev` thử dashboard, thêm Turso cho nhánh LibSQL, đẩy code lên GitHub |
+| Next task | **T5.1** — bắt đầu Identity Plane (xem `docs/iam-blueprint.md`); song song: `pnpm test`, `git push`, thêm Turso |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -91,6 +91,57 @@ pnpm install && pnpm build && pnpm test
 - [x] **T4.8** `packages/sdk`: `createInfraClient()` + auth + db + kiểu `Result`
 - [x] **T4.9** `README.md` quickstart "dưới 10 dòng"
 - [ ] **G4** Gate cuối: cần chạy thật với Neon rồi tích hợp thử một child app → bump **v1.0.0**
+
+### Phase 5 — Identity Plane (Auth Core)  `NOT STARTED`  ← giai đoạn 1 của Khoi
+> Thiết kế đầy đủ ở `docs/iam-blueprint.md`. Đây là phase lớn nhất; ba phase sau đứng lên nó.
+- [ ] **T5.1** `infra_signing_keys` + JWKS endpoint + ký ES256, xoay khoá 90 ngày
+- [ ] **T5.2** Access token (JWT 10 phút, claims `aud`=app_id / `sid` / `act` / `amr`)
+- [ ] **T5.3** `infra_refresh_tokens` + xoay vòng + **phát hiện tái sử dụng** (thu hồi cả family)
+- [ ] **T5.4** `/api/v1/auth/{token,refresh,revoke}` + CORS động theo `allowed_origins`
+- [ ] **T5.5** Đổi `/api/v1/me` từ cookie sang Bearer token (§4.3 blueprint)
+- [ ] **T5.6** **Tách `pk_` / `sk_`** — thêm `key_type`, chặn `sk_` gọi từ trình duyệt (§4.1)
+- [ ] **T5.7** `infra_platform_admins` + allowlist email + MFA bắt buộc cho super admin
+- [ ] **T5.8** MFA: TOTP + backup codes + `infra_mfa_factors` (nhiều yếu tố/user)
+- [ ] **T5.9** Passkey/WebAuthn: đăng ký + đăng nhập + discoverable credentials
+- [ ] **T5.10** Step-up auth + `infra_trusted_devices`
+- [ ] **T5.11** Session & device management: danh sách, thu hồi từng phiên/tất cả, idle + absolute timeout
+- [ ] **T5.12** RBAC: `infra_roles`, `infra_role_assignments`, catalog permission, khớp wildcard
+- [ ] **T5.13** ABAC: `infra_policies` + engine đánh giá + deny thắng allow + mặc định từ chối
+- [ ] **T5.14** `check()` API + decision log vào `infra_audit_logs`
+- [ ] **T5.15** Workspace schema (`infra_workspaces`, `infra_workspace_members`, `workspace_id` NULLABLE)
+- [ ] **T5.16** Vòng đời user: mời, chuyển, vô hiệu hoá, offboard (thu hồi mọi token), soft delete + purge
+- [ ] **T5.17** `infra_service_accounts` + grant `client_credentials`
+- [ ] **T5.18** Chống dò mật khẩu, kiểm mật khẩu đã lộ (HIBP k-anonymity), luồng khôi phục tài khoản
+- [ ] **T5.19** Webhook sự kiện identity cho app con
+- [ ] **T5.20** Test: cách ly chéo app, tái sử dụng refresh token, leo thang quyền, mặc định từ chối
+- [ ] **G5** Gate → bump **v0.4.0**
+
+### Phase 6 — Auto-provisioning & Delegation  `NOT STARTED`  ← giai đoạn 2
+- [ ] **T6.1** Neon API: tự tạo project/branch khi tạo app mới
+- [ ] **T6.2** Turso API: tự tạo database + token
+- [ ] **T6.3** Tự mã hoá DSN vừa tạo, tự dọn khi xoá app
+- [ ] **T6.4** Theo dõi hạn mức free tier từng nhà cung cấp
+- [ ] **T6.5** Impersonation có lý do + hạn giờ + banner + audit (`infra_impersonation_sessions`)
+- [ ] **G6** Gate → bump **v0.5.0**
+
+### Phase 7 — Data API Gateway & Security Rules  `NOT STARTED`  ← giai đoạn 3
+- [ ] **T7.1** Query DSL có kiểu (`from().select().eq().order().limit()`)
+- [ ] **T7.2** Biên dịch DSL → SQL tham số hoá cho Postgres và LibSQL
+- [ ] **T7.3** Áp policy: server chèn điều kiện, client chỉ thu hẹp được
+- [ ] **T7.4** `POST /api/v1/data/:resource` (pk_ + Bearer) tách khỏi `/api/v1/query` (sk_ only)
+- [ ] **T7.5** Decision log + đo hiệu năng overhead của rules
+- [ ] **T7.6** Test: cố tình vượt rào rules, SQL injection qua DSL, nới rộng filter
+- [ ] **G7** Gate → bump **v0.6.0**
+
+### Phase 8 — SDK v2 & Dashboard hoàn chỉnh  `NOT STARTED`  ← giai đoạn 4
+- [ ] **T8.1** `createServerClient()` cho BFF (token nằm ở server app con)
+- [ ] **T8.2** Tự refresh token + hàng đợi request khi token hết hạn
+- [ ] **T8.3** `infra.from(...)` query builder phía client
+- [ ] **T8.4** UI: quản lý role/permission/policy
+- [ ] **T8.5** UI: MFA, passkey, danh sách thiết bị & phiên
+- [ ] **T8.6** UI: service account, workspace
+- [ ] **T8.7** Tích hợp thật một app con (AI Study OS) làm bằng chứng dưới 10 dòng
+- [ ] **G8** Gate → **v1.0.0**
 
 ---
 

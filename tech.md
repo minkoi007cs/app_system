@@ -15,6 +15,10 @@
 
 ---
 
+> **Identity Plane:** thiết kế đầy đủ về xác thực, phân quyền, token và khoá nằm ở
+> [`docs/iam-blueprint.md`](docs/iam-blueprint.md). Đọc file đó trước khi động vào bất cứ thứ gì
+> liên quan tới đăng nhập hoặc quyền truy cập.
+
 ## 0. Anchor Protocol (bắt buộc mỗi phiên)
 
 1. **Pre-Flight Anchor Check** — đọc `tech.md` rồi `process.md` ở thư mục gốc. Cấm quét đệ quy
@@ -692,4 +696,9 @@ không chạy nửa vời.
 | ADR-008 | Dùng **Next.js 16.3.4** thay vì Next.js 15 như spec ban đầu | `create-next-app@latest` cài bản ổn định hiện hành (16.3.4 + React 19.2.8); hạ xuống 15 sẽ khoá dự án vào nhánh cũ, mất bản vá bảo mật. App Router / Server Actions / Route Handlers dùng y hệt. Đổi lại nếu Khoi yêu cầu. | 2026-09-10 |
 | ADR-009 | Mọi truy vấn Drizzle nằm trong `@infra/db`, `@infra/auth` chỉ re-export | pnpm resolve `drizzle-orm` thành hai instance khác nhau (peer khác nhau vì `@libsql/client`), gây lỗi type khi hai package cùng gọi Drizzle. Gom về một chỗ vừa sửa lỗi vừa đúng kiến trúc. | 2026-09-10 |
 | ADR-010 | Scope của `/api/v1/query` suy ra từ **câu lệnh**, không từ tham số client | Client tự khai "đây là read" thì vô nghĩa; `sqlIntent()` đọc từ khoá đầu câu (bỏ comment) nên khoá `db:read` không thể ghi dữ liệu. | 2026-09-10 |
+| ADR-012 | **Cross-domain bằng Bearer token, không dùng cookie chia sẻ** | App con chạy ở domain bất kỳ; third-party cookie bị Safari ITP chặn và Chrome đang loại bỏ. Hub cấp access token JWT 10 phút + refresh token xoay vòng có phát hiện tái sử dụng. | 2026-09-13 |
+| ADR-013 | **Tách `pk_live_` (publishable) khỏi `sk_live_` (secret)** | Tên `pk_` theo quy ước toàn ngành nghĩa là an toàn để nhúng frontend, nhưng khoá hiện tại cho chạy SQL tuỳ ý — sớm muộn sẽ có người nhúng nó vào trình duyệt. Tên tồn tại lâu hơn lớp bảo vệ. | 2026-09-13 |
+| ADR-014 | **`/api/v1/query` (SQL thô) chỉ dành cho `sk_`; client dùng Query DSL** | Không thể áp Security Rules theo dòng lên SQL tự do mà không phải phân tích ngược câu lệnh — đó là con đường dẫn tới lỗ hổng. DSL có kiểu cho phép server chèn điều kiện policy mà client không tắt được. | 2026-09-13 |
+| ADR-015 | Hoãn SAML/SCIM | Theo quyết định của Khoi: chưa có khách hàng doanh nghiệp, tránh phình phạm vi. Kiến trúc vẫn để chỗ (OIDC provider trước, SAML là lớp bọc sau). | 2026-09-13 |
+| ADR-016 | Workspace 2 tầng mở, `workspace_id` NULLABLE | Giai đoạn cá nhân `workspace_id = null`; khi thương mại hoá chỉ cần bật, không phải migrate lại dữ liệu. | 2026-09-13 |
 | ADR-011 | Rate limit lưu trong bộ nhớ tiến trình | Nền tảng self-host chạy một instance; đủ dùng và không cần thêm Redis. Nếu scale ngang thì thay bằng store dùng chung. | 2026-09-10 |
