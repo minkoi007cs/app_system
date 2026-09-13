@@ -1,6 +1,6 @@
 /** Confirms the migration actually created every table the platform needs. */
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 function loadEnv(path: string): void {
   if (!existsSync(path)) return;
@@ -14,7 +14,18 @@ function loadEnv(path: string): void {
   }
 }
 
-const root = resolve(import.meta.dirname, '..');
+function findRepoRoot(): string {
+  let current = process.cwd();
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (existsSync(resolve(current, 'pnpm-workspace.yaml'))) return current;
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return process.cwd();
+}
+
+const root = findRepoRoot();
 loadEnv(resolve(root, '.env.local'));
 
 const { default: postgres } = await import('postgres');
