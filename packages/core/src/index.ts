@@ -8,3 +8,4 @@ export * from './errors.js';
 export * from './crypto.js';
 export * from './api-key.js';
 export * from './env.js';
+export * from './jwt.js';

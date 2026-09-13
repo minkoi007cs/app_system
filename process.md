@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.3.0** |
+| Current version | **v0.3.1** |
 | Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
-| Last test | `PASS` — 10 test files, **95 tests** (core 37 · adapters 30 · sdk 12 · db 8 · web 8) |
-| Next task | **T5.1** — bắt đầu Identity Plane (xem `docs/iam-blueprint.md`); song song: `pnpm test`, `git push`, thêm Turso |
+| Last test | `PASS` — 11 test files, **122 tests** (core 64 · adapters 30 · sdk 12 · db 8 · web 8) |
+| Next task | **T5.3** — `infra_refresh_tokens` + xoay vòng + phát hiện tái sử dụng |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -94,8 +94,8 @@ pnpm install && pnpm build && pnpm test
 
 ### Phase 5 — Identity Plane (Auth Core)  `NOT STARTED`  ← giai đoạn 1 của Khoi
 > Thiết kế đầy đủ ở `docs/iam-blueprint.md`. Đây là phase lớn nhất; ba phase sau đứng lên nó.
-- [ ] **T5.1** `infra_signing_keys` + JWKS endpoint + ký ES256, xoay khoá 90 ngày
-- [ ] **T5.2** Access token (JWT 10 phút, claims `aud`=app_id / `sid` / `act` / `amr`)
+- [x] **T5.1** `infra_signing_keys` + JWKS endpoint + ký ES256, xoay khoá 90 ngày ✅
+- [x] **T5.2** Access token (JWT 10 phút, claims `aud`=app_id / `sid` / `act` / `amr`) ✅
 - [ ] **T5.3** `infra_refresh_tokens` + xoay vòng + **phát hiện tái sử dụng** (thu hồi cả family)
 - [ ] **T5.4** `/api/v1/auth/{token,refresh,revoke}` + CORS động theo `allowed_origins`
 - [ ] **T5.5** Đổi `/api/v1/me` từ cookie sang Bearer token (§4.3 blueprint)
