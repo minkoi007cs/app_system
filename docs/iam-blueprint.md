@@ -34,6 +34,7 @@ sinh viên leo thang thành quản trị hạ tầng — và hạ tầng đó n�
 mọi app**. Tách bằng ba lớp độc lập:
 
 1. Email phải nằm trong `INFRA_SUPER_ADMIN_EMAILS` (biến môi trường, không sửa được qua UI).
+   Hiện tại: `minkoi007.cs@gmail.com`. Nhiều admin thì ngăn cách bằng dấu phẩy.
 2. Phải có hàng trong `infra_platform_admins` với `status = 'active'`.
 3. MFA bắt buộc; phiên admin TTL ngắn (8h) và bắt re-auth trước thao tác nhạy cảm.
 
