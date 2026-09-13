@@ -16,7 +16,7 @@
  * only hosts, latencies and row counts appear in the output.
  */
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { createAdapter } from '@infra/adapters';
 import { assertMasterKey, maskApiKey } from '@infra/core';
 import {
@@ -53,7 +53,7 @@ function findRepoRoot(): string {
   let current = process.cwd();
   for (let depth = 0; depth < 6; depth += 1) {
     if (existsSync(resolve(current, 'pnpm-workspace.yaml'))) return current;
-    const parent = require('node:path').dirname(current);
+    const parent = dirname(current);
     if (parent === current) break;
     current = parent;
   }
