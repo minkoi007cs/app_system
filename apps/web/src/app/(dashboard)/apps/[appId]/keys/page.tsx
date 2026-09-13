@@ -46,6 +46,7 @@ export default async function KeysPage({ params }: { params: Promise<{ appId: st
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Key</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Scopes</TableHead>
                   <TableHead>Last used</TableHead>
                   <TableHead>State</TableHead>
@@ -57,6 +58,11 @@ export default async function KeysPage({ params }: { params: Promise<{ appId: st
                   <TableRow key={key.id}>
                     <TableCell className="font-medium">{key.name}</TableCell>
                     <TableCell className="font-mono text-xs">{key.keyPrefix}••••</TableCell>
+                    <TableCell>
+                      <Badge variant={key.keyType === 'secret' ? 'destructive' : 'secondary'}>
+                        {key.keyType === 'secret' ? 'secret' : 'publishable'}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-xs">{key.scopes.join(', ')}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {key.lastUsedAt === null ? 'never' : key.lastUsedAt.toISOString().slice(0, 16).replace('T', ' ')}

@@ -1,0 +1,115 @@
+/**
+ * POST /api/v1/auth/token — exchange user credentials for an access + refresh token pair.
+ *
+ * The app is identified by the API key in the Authorization header (publishable is fine here);
+ * the user is identified by the credentials in the body. `aud` on the resulting token always
+ * comes from the key, never from the body.
+ */
+import { randomUUID } from 'node:crypto';
+import { auth, issueTokenPair } from '@infra/auth';
+import { InfraError } from '@infra/core';
+import { addMember, getMembership, recordAuditAsync } from '@infra/db';
+import { db } from '@/lib/db';
+import { corsHeaders, preflightResponse } from '@/lib/cors';
+import { clientIp, requireApiKey, userAgent } from '@/lib/guard';
+import { tokenIssuer } from '@/lib/issuer';
+import { jsonOk, newRequestId, toErrorResponse } from '@/lib/response';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+interface TokenBody {
+  grant_type?: unknown;
+  email?: unknown;
+  password?: unknown;
+}
+
+export async function OPTIONS(request: Request): Promise<Response> {
+  // Preflight happens before authentication, so the allowlist cannot be app-specific yet;
+  // the actual POST re-checks the origin against the app that owns the key.
+  return preflightResponse(request.headers.get('origin'), [request.headers.get('origin') ?? '']);
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const requestId = newRequestId();
+  const origin = request.headers.get('origin');
+
+  try {
+    const caller = await requireApiKey(request, 'auth:read');
+    const cors = corsHeaders(origin, caller.app.allowedOrigins);
+
+    // A browser call must come from an origin this app registered.
+    if (origin !== null && origin !== '' && !caller.app.allowedOrigins.includes(origin)) {
+      throw new InfraError('FORBIDDEN_SCOPE', 'origin is not registered for this application', {
+        details: { origin },
+      });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as TokenBody;
+    const grantType = typeof body.grant_type === 'string' ? body.grant_type : 'password';
+    if (grantType !== 'password') {
+      throw new InfraError('VALIDATION_FAILED', `unsupported grant_type: ${grantType}`);
+    }
+    if (typeof body.email !== 'string' || typeof body.password !== 'string') {
+      throw new InfraError('VALIDATION_FAILED', 'email and password are required');
+    }
+
+    let userId: string;
+    try {
+      const result = await auth().api.signInEmail({
+        body: { email: body.email, password: body.password },
+      });
+      userId = result.user.id;
+    } catch {
+      recordAuditAsync(db(), {
+        appId: caller.appId,
+        actorType: 'api_key',
+        actorId: caller.key.id,
+        action: 'auth.signin.failed',
+        outcome: 'failure',
+        ipAddress: clientIp(request),
+        meta: { requestId },
+      });
+      // Deliberately identical whether the email is unknown or the password is wrong.
+      throw new InfraError('UNAUTHENTICATED', 'invalid email or password');
+    }
+
+    // B2C: a user signing into an app for the first time becomes a member of that app.
+    let membership = await getMembership(db(), caller.appId, userId);
+    membership ??= await addMember(db(), caller.appId, userId, 'member');
+
+    const sessionId = `sess_${randomUUID().replace(/-/g, '')}`;
+    const pair = await issueTokenPair(
+      db(),
+      {
+        userId,
+        appId: caller.appId,
+        sessionId,
+        scope: ['db:read', 'auth:read'],
+        roles: [membership.role],
+        amr: ['pwd'],
+        userAgent: userAgent(request),
+        ipAddress: clientIp(request),
+      },
+      { issuer: tokenIssuer() },
+    );
+
+    recordAuditAsync(db(), {
+      appId: caller.appId,
+      actorType: 'api_key',
+      actorId: caller.key.id,
+      action: 'auth.token.issued',
+      targetType: 'user',
+      targetId: userId,
+      ipAddress: clientIp(request),
+      userAgent: userAgent(request),
+      meta: { sessionId, requestId, keyType: caller.kind },
+    });
+
+    const response = jsonOk(pair, requestId);
+    for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
+    return response;
+  } catch (error) {
+    return toErrorResponse(error, requestId);
+  }
+}

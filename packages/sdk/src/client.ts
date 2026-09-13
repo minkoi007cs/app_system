@@ -22,13 +22,14 @@ export function createInfraClient(options: InfraClientOptions): InfraClient {
   }
 
   if (options.apiKey !== undefined) {
-    if (!/^pk_(live|test)_[0-9A-Za-z]{32}$/.test(options.apiKey)) {
-      throw new Error('[@infra/sdk] apiKey must look like pk_live_… or pk_test_…');
+    if (!/^(pk|sk)_(live|test)_[0-9A-Za-z]{32}$/.test(options.apiKey)) {
+      throw new Error('[@infra/sdk] apiKey must look like sk_live_… (server) or pk_live_… (browser)');
     }
-    if (isBrowser() && options.allowBrowserApiKey !== true) {
+    // A publishable key is meant for the browser. A secret key never is.
+    if (options.apiKey.startsWith('sk_') && isBrowser() && options.allowBrowserApiKey !== true) {
       throw new Error(
-        '[@infra/sdk] refusing to use an API key in a browser. Keep pk_live_ keys on your server, ' +
-          'or pass allowBrowserApiKey: true if you really know what you are doing.',
+        '[@infra/sdk] refusing to use a secret key (sk_…) in a browser — it would be readable by ' +
+          'anyone who opens devtools. Use a publishable key (pk_…) here and keep sk_ on your server.',
       );
     }
   }

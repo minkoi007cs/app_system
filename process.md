@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.3.1** |
+| Current version | **v0.4.0-rc.1** |
 | Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
-| Last test | `PASS` — 11 test files, **122 tests** (core 64 · adapters 30 · sdk 12 · db 8 · web 8) |
-| Next task | **T5.3** — `infra_refresh_tokens` + xoay vòng + phát hiện tái sử dụng |
+| Last test | `PASS` — 13 test files, **139 tests** (core 74 · adapters 30 · sdk 12 · web 15 · db 8) |
+| Next task | **T5.7** — `infra_platform_admins` + allowlist email + MFA bắt buộc cho super admin |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -96,10 +96,10 @@ pnpm install && pnpm build && pnpm test
 > Thiết kế đầy đủ ở `docs/iam-blueprint.md`. Đây là phase lớn nhất; ba phase sau đứng lên nó.
 - [x] **T5.1** `infra_signing_keys` + JWKS endpoint + ký ES256, xoay khoá 90 ngày ✅
 - [x] **T5.2** Access token (JWT 10 phút, claims `aud`=app_id / `sid` / `act` / `amr`) ✅
-- [ ] **T5.3** `infra_refresh_tokens` + xoay vòng + **phát hiện tái sử dụng** (thu hồi cả family)
-- [ ] **T5.4** `/api/v1/auth/{token,refresh,revoke}` + CORS động theo `allowed_origins`
-- [ ] **T5.5** Đổi `/api/v1/me` từ cookie sang Bearer token (§4.3 blueprint)
-- [ ] **T5.6** **Tách `pk_` / `sk_`** — thêm `key_type`, chặn `sk_` gọi từ trình duyệt (§4.1)
+- [x] **T5.3** `infra_refresh_tokens` + xoay vòng + **phát hiện tái sử dụng** (thu hồi cả family) ✅
+- [x] **T5.4** `/api/v1/auth/{token,refresh,revoke}` + CORS động theo `allowed_origins` ✅
+- [x] **T5.5** Đổi `/api/v1/me` từ cookie sang Bearer token (§4.3 blueprint) ✅
+- [x] **T5.6** **Tách `pk_` / `sk_`** — thêm `key_type`, chặn `sk_` gọi từ trình duyệt (§4.1) ✅
 - [ ] **T5.7** `infra_platform_admins` + allowlist email + MFA bắt buộc cho super admin
 - [ ] **T5.8** MFA: TOTP + backup codes + `infra_mfa_factors` (nhiều yếu tố/user)
 - [ ] **T5.9** Passkey/WebAuthn: đăng ký + đăng nhập + discoverable credentials

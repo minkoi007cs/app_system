@@ -4,7 +4,9 @@ import {
   hashApiKey,
   InfraError,
   isApiKeyFormatValid,
+  normaliseScopes,
   type ApiKeyEnvironment,
+  type ApiKeyKind,
   type ApiKeyScope,
 } from '@infra/core';
 import type { MasterDatabase } from '../client.js';
@@ -17,6 +19,8 @@ export interface IssueApiKeyInput {
   createdBy: string;
   scopes?: ApiKeyScope[];
   environment?: ApiKeyEnvironment;
+  /** 'secret' (sk_) by default — publishable keys must be requested explicitly. */
+  kind?: ApiKeyKind;
   expiresAt?: Date;
 }
 
@@ -27,7 +31,9 @@ export interface IssuedApiKey {
 }
 
 export async function issueApiKey(db: MasterDatabase, input: IssueApiKeyInput): Promise<IssuedApiKey> {
-  const generated = generateApiKey(input.environment ?? 'live');
+  const kind = input.kind ?? 'secret';
+  const generated = generateApiKey(kind, input.environment ?? 'live');
+  const scopes = normaliseScopes(kind, input.scopes ?? ['db:read']);
   const [row] = await db
     .insert(infraApiKeys)
     .values({
@@ -36,7 +42,8 @@ export async function issueApiKey(db: MasterDatabase, input: IssueApiKeyInput): 
       keyHash: generated.hash,
       keyPrefix: generated.prefix,
       environment: generated.environment,
-      scopes: input.scopes ?? ['db:read'],
+      keyType: kind,
+      scopes,
       createdBy: input.createdBy,
       expiresAt: input.expiresAt ?? null,
     })
@@ -130,6 +137,7 @@ export async function rotateApiKey(
     createdBy,
     scopes: existing.scopes,
     environment: existing.environment,
+    kind: existing.keyType,
   });
   await revokeApiKey(db, keyId);
   return issued;

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import type { ApiKeyScope } from '@infra/core';
+import type { ApiKeyKind, ApiKeyScope } from '@infra/core';
 import { issueApiKey, recordAudit, revokeApiKey, rotateApiKey } from '@infra/db';
 import { db } from '@/lib/db';
 import { requireAdminSession } from '@/lib/session';
@@ -20,6 +20,7 @@ export async function issueKeyAction(_prev: IssueKeyState, formData: FormData): 
   const appId = String(formData.get('appId') ?? '');
   const name = String(formData.get('name') ?? '').trim() || 'untitled key';
   const environment = formData.get('environment') === 'test' ? 'test' : 'live';
+  const kind: ApiKeyKind = formData.get('kind') === 'publishable' ? 'publishable' : 'secret';
   const scopes = ALL_SCOPES.filter((scope) => formData.get(scope) === 'on');
 
   const issued = await issueApiKey(db(), {
@@ -27,6 +28,7 @@ export async function issueKeyAction(_prev: IssueKeyState, formData: FormData): 
     name,
     createdBy: session.userId,
     environment,
+    kind,
     scopes: scopes.length > 0 ? scopes : ['db:read'],
   });
 
@@ -41,7 +43,11 @@ export async function issueKeyAction(_prev: IssueKeyState, formData: FormData): 
   });
 
   revalidatePath(`/apps/${appId}/keys`);
-  return { ok: true, message: 'copy this key now — it will never be shown again', rawKey: issued.rawKey };
+  const warning =
+    kind === 'secret'
+      ? 'copy this key now — it will never be shown again. Server-side only: never ship it to a browser.'
+      : 'copy this key now — it will never be shown again. Safe to embed in a browser bundle.';
+  return { ok: true, message: warning, rawKey: issued.rawKey };
 }
 
 export async function revokeKeyAction(appId: string, keyId: string): Promise<void> {

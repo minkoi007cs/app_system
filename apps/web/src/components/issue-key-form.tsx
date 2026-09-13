@@ -28,6 +28,18 @@ export function IssueKeyForm({ appId }: { appId: string }) {
               <Input id="name" name="name" placeholder="production server" required />
             </div>
             <div className="grid gap-1.5">
+              <Label htmlFor="kind">Key type</Label>
+              <select
+                id="kind"
+                name="kind"
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                defaultValue="secret"
+              >
+                <option value="secret">sk_ · secret (server only)</option>
+                <option value="publishable">pk_ · publishable (browser safe)</option>
+              </select>
+            </div>
+            <div className="grid gap-1.5">
               <Label htmlFor="environment">Environment</Label>
               <select
                 id="environment"
@@ -43,6 +55,10 @@ export function IssueKeyForm({ appId }: { appId: string }) {
               {pending ? 'Issuing…' : 'Issue key'}
             </Button>
           </div>
+          <p className="text-muted-foreground text-xs">
+            A publishable key can only start an auth flow and read through the rules engine, and is
+            capped to db:read / auth:read. Raw SQL always requires a secret key.
+          </p>
           <fieldset className="flex flex-wrap gap-4">
             {SCOPES.map((scope) => (
               <label key={scope} className="flex items-center gap-2 text-sm">

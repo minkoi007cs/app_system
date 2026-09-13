@@ -48,7 +48,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const intent = sqlIntent(body.sql);
-    const caller = await requireApiKey(request, intent === 'write' ? 'db:write' : 'db:read');
+    // Raw SQL bypasses the rules engine, so only a secret key may use it (ADR-014).
+    const caller = await requireApiKey(request, intent === 'write' ? 'db:write' : 'db:read', {
+      kinds: ['secret'],
+    });
 
     const adapter = await resolver().resolve(caller.appId);
     const result = await adapter.query({ sql: body.sql, params: body.params ?? [] });

@@ -15,7 +15,14 @@ import {
   type SignedToken,
   type TokenType,
 } from '@infra/core';
-import { getActiveSigningKey, listPublicSigningKeys, type MasterDatabase } from '@infra/db';
+import {
+  getActiveSigningKey,
+  getMembership,
+  issueRefreshToken,
+  listPublicSigningKeys,
+  rotateRefreshToken,
+  type MasterDatabase,
+} from '@infra/db';
 
 export interface IssueTokenInput {
   /** user id, or a service account id prefixed `svc_`. */
@@ -140,4 +147,107 @@ export function bearerFromHeader(header: string | null | undefined): string | nu
   if (header === null || header === undefined) return null;
   const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
   return match?.[1] ?? null;
+}
+
+// ── access + refresh as a pair ────────────────────────────────────────────────
+
+export interface TokenPair {
+  tokenType: 'Bearer';
+  accessToken: string;
+  refreshToken: string;
+  /** Seconds until the access token expires — what an OAuth client expects. */
+  expiresIn: number;
+  expiresAt: string;
+  sessionId: string;
+}
+
+export interface IssuePairInput {
+  userId: string;
+  appId: string;
+  sessionId: string;
+  scope?: readonly string[];
+  roles?: readonly string[];
+  workspaceId?: string | null;
+  amr?: readonly string[];
+  userAgent?: string | null;
+  ipAddress?: string | null;
+}
+
+export async function issueTokenPair(
+  db: MasterDatabase,
+  input: IssuePairInput,
+  options: TokenIssuerOptions,
+): Promise<TokenPair> {
+  const access = await issueAccessToken(
+    db,
+    {
+      subject: input.userId,
+      appId: input.appId,
+      sessionId: input.sessionId,
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
+      ...(input.roles === undefined ? {} : { roles: input.roles }),
+      ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+      ...(input.amr === undefined ? {} : { amr: input.amr }),
+    },
+    options,
+  );
+
+  const refresh = await issueRefreshToken(db, {
+    userId: input.userId,
+    appId: input.appId,
+    sessionId: input.sessionId,
+    userAgent: input.userAgent ?? null,
+    ipAddress: input.ipAddress ?? null,
+  });
+
+  return {
+    tokenType: 'Bearer',
+    accessToken: access.token,
+    refreshToken: refresh.raw,
+    expiresIn: access.claims.exp - access.claims.iat,
+    expiresAt: access.expiresAt.toISOString(),
+    sessionId: input.sessionId,
+  };
+}
+
+export interface RotatePairContext {
+  userAgent?: string | null;
+  ipAddress?: string | null;
+}
+
+/**
+ * Exchanges a refresh token for a brand new pair.
+ * Reuse detection lives in the db layer and surfaces here as an UNAUTHENTICATED error whose
+ * details carry `reuseDetected: true`, so the route can audit it distinctly.
+ */
+export async function rotateTokenPair(
+  db: MasterDatabase,
+  rawRefreshToken: string,
+  options: TokenIssuerOptions,
+  context: RotatePairContext = {},
+): Promise<TokenPair> {
+  const rotated = await rotateRefreshToken(db, rawRefreshToken, context);
+  const membership = await getMembership(db, rotated.row.appId, rotated.row.userId);
+
+  const access = await issueAccessToken(
+    db,
+    {
+      subject: rotated.row.userId,
+      appId: rotated.row.appId,
+      sessionId: rotated.row.sessionId,
+      scope: ['db:read', 'auth:read'],
+      roles: membership === null ? [] : [membership.role],
+      amr: ['refresh'],
+    },
+    options,
+  );
+
+  return {
+    tokenType: 'Bearer',
+    accessToken: access.token,
+    refreshToken: rotated.raw,
+    expiresIn: access.claims.exp - access.claims.iat,
+    expiresAt: access.expiresAt.toISOString(),
+    sessionId: rotated.row.sessionId,
+  };
 }

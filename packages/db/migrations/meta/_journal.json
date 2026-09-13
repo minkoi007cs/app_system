@@ -15,6 +15,13 @@
       "when": 1789273430749,
       "tag": "0001_glossy_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789274668274,
+      "tag": "0002_shiny_sally_floyd",
+      "breakpoints": true
     }
   ]
 }
