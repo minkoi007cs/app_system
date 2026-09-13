@@ -6,7 +6,7 @@
  * comes from the key, never from the body.
  */
 import { randomUUID } from 'node:crypto';
-import { auth, issueTokenPair } from '@infra/auth';
+import { auth, issueAccessToken, issueTokenPair } from '@infra/auth';
 import { InfraError } from '@infra/core';
 import { addMember, getMembership, recordAuditAsync } from '@infra/db';
 import { db } from '@/lib/db';
@@ -47,6 +47,56 @@ export async function POST(request: Request): Promise<Response> {
 
     const body = (await request.json().catch(() => ({}))) as TokenBody;
     const grantType = typeof body.grant_type === 'string' ? body.grant_type : 'password';
+
+    // ── machine identity: no user, no refresh token, short life ──────────────
+    if (grantType === 'client_credentials') {
+      if (caller.serviceAccountId === null) {
+        throw new InfraError(
+          'FORBIDDEN_SCOPE',
+          'client_credentials requires a key that belongs to a service account',
+        );
+      }
+
+      const machineToken = await issueAccessToken(
+        db(),
+        {
+          subject: `svc_${caller.serviceAccountId}`,
+          appId: caller.appId,
+          sessionId: `svc_${caller.key.id}`,
+          scope: caller.key.scopes,
+          roles: ['service_account'],
+          amr: ['api_key'],
+          // Machines re-request rather than refresh: a refresh token is a long-lived
+          // credential no process needs when it already holds the key that minted this one.
+          ttlSeconds: 900,
+        },
+        { issuer: tokenIssuer() },
+      );
+
+      recordAuditAsync(db(), {
+        appId: caller.appId,
+        actorType: 'api_key',
+        actorId: caller.key.id,
+        action: 'auth.token.issued',
+        targetType: 'service_account',
+        targetId: caller.serviceAccountId,
+        ipAddress: clientIp(request),
+        meta: { grant: 'client_credentials', requestId },
+      });
+
+      const machineResponse = jsonOk(
+        {
+          tokenType: 'Bearer',
+          accessToken: machineToken.token,
+          expiresIn: machineToken.claims.exp - machineToken.claims.iat,
+          expiresAt: machineToken.expiresAt.toISOString(),
+        },
+        requestId,
+      );
+      for (const [key, value] of Object.entries(cors)) machineResponse.headers.set(key, value);
+      return machineResponse;
+    }
+
     if (grantType !== 'password') {
       throw new InfraError('VALIDATION_FAILED', `unsupported grant_type: ${grantType}`);
     }

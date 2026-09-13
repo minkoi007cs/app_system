@@ -28,6 +28,8 @@ export const infraApiKeys = pgTable(
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /** Set when the key belongs to a machine identity rather than being issued ad hoc. */
+    serviceAccountId: uuid('service_account_id'),
     createdBy: text('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

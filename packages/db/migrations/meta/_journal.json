@@ -43,6 +43,13 @@
       "when": 1789279591134,
       "tag": "0005_funny_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789280380739,
+      "tag": "0006_white_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

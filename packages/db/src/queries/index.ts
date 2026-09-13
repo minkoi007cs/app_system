@@ -12,3 +12,5 @@ export * from './webauthn.js';
 export * from './trusted-devices.js';
 export * from './access.js';
 export * from './workspaces.js';
+export * from './lifecycle.js';
+export * from './service-accounts.js';

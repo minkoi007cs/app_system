@@ -31,6 +31,14 @@ export const AUDIT_ACTIONS = [
   'policy.created',
   'policy.updated',
   'policy.deleted',
+  'user.invited',
+  'user.joined',
+  'user.suspended',
+  'user.reinstated',
+  'user.offboarded',
+  'user.transferred',
+  'service_account.created',
+  'service_account.revoked',
   'health.check',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

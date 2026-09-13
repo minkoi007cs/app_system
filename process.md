@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.4.0-rc.4** |
+| Current version | **v0.4.0-rc.5** |
 | Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
-| Last test | `PASS` — 16 test files, **221 tests** (core 156 · adapters 30 · web 15 · sdk 12 · db 8) |
-| Next task | **T5.16** — vòng đời user (mời / chuyển / offboard) · rồi đóng gate **G5** |
+| Last test | `PASS` — 18 test files, **239 tests** (core 174 · adapters 30 · web 15 · sdk 12 · db 8) |
+| Next task | **T5.18** — chống dò mật khẩu + HIBP + luồng khôi phục tài khoản |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -109,8 +109,8 @@ pnpm install && pnpm build && pnpm test
 - [x] **T5.13** ABAC: `infra_policies` + engine + deny thắng allow + mặc định từ chối ✅
 - [x] **T5.14** `checkAccess()` + decision log vào `infra_audit_logs` ✅
 - [x] **T5.15** Workspace schema (`infra_workspaces`, `infra_workspace_members`, `workspace_id` NULLABLE) ✅
-- [ ] **T5.16** Vòng đời user: mời, chuyển, vô hiệu hoá, offboard (thu hồi mọi token), soft delete + purge
-- [ ] **T5.17** `infra_service_accounts` + grant `client_credentials`
+- [x] **T5.16** Vòng đời user: mời, chuyển, vô hiệu hoá, offboard (thu hồi mọi token), soft delete + purge ✅
+- [x] **T5.17** `infra_service_accounts` + grant `client_credentials` + IP allowlist ✅
 - [ ] **T5.18** Chống dò mật khẩu, kiểm mật khẩu đã lộ (HIBP k-anonymity), luồng khôi phục tài khoản
 - [ ] **T5.19** Webhook sự kiện identity cho app con
 - [ ] **T5.20** Test: cách ly chéo app, tái sử dụng refresh token, leo thang quyền, mặc định từ chối

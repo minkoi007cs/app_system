@@ -17,7 +17,13 @@ import {
   type ApiKeyKind,
   type ApiKeyScope,
 } from '@infra/core';
-import { touchApiKeyUsage, verifyApiKey, type InfraApiKeyRow, type InfraAppRow } from '@infra/db';
+import {
+  assertServiceAccountUsable,
+  touchApiKeyUsage,
+  verifyApiKey,
+  type InfraApiKeyRow,
+  type InfraAppRow,
+} from '@infra/db';
 import { db } from './db';
 import { consume } from './rate-limit';
 
@@ -26,6 +32,8 @@ export interface AuthenticatedCaller {
   app: InfraAppRow;
   appId: string;
   kind: ApiKeyKind;
+  /** Set when the key speaks for a machine identity rather than a person. */
+  serviceAccountId: string | null;
 }
 
 export interface GuardOptions {
@@ -82,9 +90,14 @@ export async function requireApiKey(
     });
   }
 
+  // A machine identity carries extra conditions its owner set: status and an IP allowlist.
+  if (key.serviceAccountId !== null) {
+    await assertServiceAccountUsable(db(), key.serviceAccountId, clientIp(request));
+  }
+
   void touchApiKeyUsage(db(), key.id).catch(() => {});
 
-  return { key, app, appId: app.id, kind };
+  return { key, app, appId: app.id, kind, serviceAccountId: key.serviceAccountId };
 }
 
 export function clientIp(request: Request): string | null {
