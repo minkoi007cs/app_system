@@ -538,7 +538,10 @@ Thêm provider mới = thêm một file adapter + một nhánh trong factory. Kh
 ### 7.4 Health monitoring
 
 `SELECT 1` (PG) / `SELECT 1` (LibSQL) → đo latency:
-`< 300ms healthy`, `300–1500ms degraded`, `timeout/error down`.
+`< 300ms healthy`, `>= 300ms degraded`. **`down` chỉ dành cho database KHÔNG trả lời**
+(lỗi hoặc timeout) — free tier ngủ khi rảnh nên lần gọi đầu sau khi ngủ có thể mất vài giây;
+chậm không đồng nghĩa với chết, báo `down` lúc đó là báo động giả (đã gặp thật ở lần smoke
+test đầu tiên: Neon trả lời sau 1556ms và query vẫn chạy tốt).
 Kết quả ghi vào `infra_database_configs.health_*` và hiển thị ở `/dashboard/health`.
 
 ---

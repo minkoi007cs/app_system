@@ -53,11 +53,20 @@ export interface AdapterConfig {
 export const DEFAULT_QUERY_TIMEOUT_MS = 10_000;
 export const DEFAULT_POOL_MAX = 3;
 
-/** < 300ms healthy · < 1500ms degraded · slower or failing counts as down. */
+/**
+ * < 300ms healthy, anything slower but still answering is degraded.
+ *
+ * 'down' is reserved for a database that did NOT answer (error or timeout). Free-tier
+ * databases sleep when idle, so the first query after a pause can take seconds — slow
+ * is not the same as unreachable, and reporting it as down cries wolf.
+ */
 export const HEALTH_THRESHOLDS = { healthyMs: 300, degradedMs: 1500 } as const;
 
 export function classifyLatency(latencyMs: number): HealthStatus {
-  if (latencyMs < HEALTH_THRESHOLDS.healthyMs) return 'healthy';
-  if (latencyMs < HEALTH_THRESHOLDS.degradedMs) return 'degraded';
-  return 'down';
+  return latencyMs < HEALTH_THRESHOLDS.healthyMs ? 'healthy' : 'degraded';
+}
+
+/** True when a cold start is the likely explanation for a slow-but-successful ping. */
+export function looksLikeColdStart(latencyMs: number): boolean {
+  return latencyMs >= HEALTH_THRESHOLDS.degradedMs;
 }

@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.2.0** |
+| Current version | **v0.3.0** |
 | Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
-| Phase status | `BLOCKED ON CREDENTIALS` — chỉ còn T1.7 (chạy migration lên Neon) cần Khoi cung cấp tài khoản |
+| Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
 | Last test | `PASS` — 10 test files, **95 tests** (core 37 · adapters 30 · sdk 12 · db 8 · web 8) |
-| Next task | **T1.7 — `pnpm db:migrate` lên Neon** (xem `docs/setup-databases.md`), sau đó smoke test end-to-end |
+| Next task | **G4** — chạy `pnpm dev` thử dashboard, thêm Turso cho nhánh LibSQL, đẩy code lên GitHub |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -55,10 +55,9 @@ pnpm install && pnpm build && pnpm test
 - [x] **T1.4** `packages/core`: `env.ts` (zod), `errors.ts` (InfraError taxonomy)
 - [x] **T1.5** Vitest cho `core` — crypto round-trip, sai AAD/authTag phải fail, format khoá
 - [x] **T1.6** `packages/db`: schema Drizzle 4 bảng `infra_*` + bảng Better Auth + `infra_app_members`
-- [ ] **T1.7** Chạy migration `0000` lên Neon Master DB — ⛔ **chờ `INFRA_MASTER_DATABASE_URL`**
-      (file migration đã sinh sẵn offline: `packages/db/migrations/0000_tan_random.sql`, 9 bảng)
+- [x] **T1.7** Chạy migration `0000` lên Neon Master DB ✅ **applied successfully** (2026-09-12)
 - [x] **T1.8** `packages/db/src/queries/` — truy vấn có kiểu cho apps / keys / configs / audit
-- [ ] **G1** ✅ Gate: `pnpm build` PASS · `pnpm test` PASS · zero implicit any → bump **v0.2.0**
+- [x] **G1** ✅ Gate đã đóng — Phase 1 hoàn tất
 
 ### Phase 2 — Centralized Auth Hub  `DONE (chờ chạy thật)`
 - [x] **T2.1** `packages/auth`: khởi tạo Better Auth + Drizzle adapter trên Master DB

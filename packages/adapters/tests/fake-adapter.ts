@@ -22,7 +22,7 @@ export function createFakeAdapter(options: { latencyMs?: number; failHealth?: bo
       if (options.failHealth === true) throw new Error('connection refused');
       const latencyMs = options.latencyMs ?? 10;
       return {
-        status: latencyMs < 300 ? 'healthy' : latencyMs < 1500 ? 'degraded' : 'down',
+        status: latencyMs < 300 ? 'healthy' : 'degraded',
         latencyMs,
         checkedAt: new Date(),
       };

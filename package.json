@@ -15,7 +15,8 @@
     "db:generate": "pnpm --filter @infra/db exec drizzle-kit generate",
     "db:migrate": "pnpm --filter @infra/db exec drizzle-kit migrate",
     "db:studio": "pnpm --filter @infra/db exec drizzle-kit studio",
-    "smoke": "tsx scripts/smoke-multi-provider.mts"
+    "smoke": "tsx scripts/smoke-multi-provider.mts",
+    "verify:schema": "pnpm --filter @infra/db exec tsx scripts/verify-schema.mts"
   },
   "devDependencies": {
     "@infra/adapters": "workspace:^",

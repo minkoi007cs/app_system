@@ -4,6 +4,7 @@ import {
   checkAdapterHealth,
   classifyLatency,
   createAdapter,
+  looksLikeColdStart,
   DIALECT_BY_PROVIDER,
   parseLibsqlConnectionString,
   withTimeout,
@@ -54,10 +55,13 @@ describe('withTimeout', () => {
 });
 
 describe('health', () => {
-  it('classifies latency bands', () => {
+  it('classifies a successful ping as healthy or degraded, never down', () => {
     expect(classifyLatency(50)).toBe('healthy');
     expect(classifyLatency(800)).toBe('degraded');
-    expect(classifyLatency(4000)).toBe('down');
+    // A cold free-tier database is slow, not unreachable.
+    expect(classifyLatency(4000)).toBe('degraded');
+    expect(looksLikeColdStart(4000)).toBe(true);
+    expect(looksLikeColdStart(50)).toBe(false);
   });
 
   it('turns a thrown driver error into a down report', async () => {

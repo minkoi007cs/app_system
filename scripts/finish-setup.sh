@@ -37,7 +37,7 @@ main() {
   fi
 
   step "C · verify the 9 tables exist"
-  run pnpm exec tsx scripts/verify-schema.mts
+  run pnpm --filter @infra/db exec tsx scripts/verify-schema.mts
 
   step "D · multi-provider smoke test"
   run pnpm smoke

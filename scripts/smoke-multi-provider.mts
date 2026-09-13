@@ -187,7 +187,10 @@ async function runProvider(target: (typeof TARGETS)[number]): Promise<Outcome | 
     }
 
     base.ok = true;
-    console.log(`✅ ${target.provider.padEnd(9)} ${base.host} · ${base.health} ${base.latencyMs}ms · ${base.roundTrip}`);
+    const cold = base.latencyMs !== null && base.latencyMs >= 1500 ? ' (cold start)' : '';
+    console.log(
+      `✅ ${target.provider.padEnd(9)} ${base.host} · ${base.health} ${base.latencyMs}ms${cold} · ${base.roundTrip}`,
+    );
     return base;
   } catch (error) {
     base.note = error instanceof Error ? error.message : String(error);
