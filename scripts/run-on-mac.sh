@@ -104,40 +104,9 @@ TS
 
   step "6 · deploy"; runt 300 "${NEON[@]}" deploy
 
-  step "7 · master connection string → .env.local"
-  MASTER_URL="$("${NEON[@]}" connection-string production --project-id "${PROJECT_ID}" 2>/dev/null | grep -o 'postgres[^[:space:]]*' | tail -1)"
-  if [[ -z "${MASTER_URL}" ]]; then
-    echo "❌ could not read the master connection string"; return 1
-  fi
-  echo "got the master connection string (hidden)"
-
-  if [[ -f .env.local ]]; then
-    echo ".env.local already exists — left untouched"
-  else
-    cp .env.example .env.local
-    ENC_KEY="$(openssl rand -hex 32)"
-    AUTH_SECRET="$(openssl rand -base64 32)"
-    python3 - "$MASTER_URL" "$ENC_KEY" "$AUTH_SECRET" <<'PY'
-import sys, re, pathlib
-url, enc, auth = sys.argv[1], sys.argv[2], sys.argv[3]
-p = pathlib.Path('.env.local'); s = p.read_text()
-s = re.sub(r'^INFRA_MASTER_DATABASE_URL=.*$', f'INFRA_MASTER_DATABASE_URL="{url}"', s, flags=re.M)
-s = re.sub(r'^INFRA_MASTER_ENCRYPTION_KEY=.*$', f'INFRA_MASTER_ENCRYPTION_KEY="{enc}"', s, flags=re.M)
-s = re.sub(r'^BETTER_AUTH_SECRET=.*$', f'BETTER_AUTH_SECRET="{auth}"', s, flags=re.M)
-p.write_text(s)
-print('.env.local written')
-PY
-    {
-      echo ""
-      echo "┌──────────────────────────────────────────────────────────────┐"
-      echo "│  SAO LƯU KHOÁ NÀY VÀO PASSWORD MANAGER — CHỈ HIỆN MỘT LẦN    │"
-      echo "│  Mất khoá = mất toàn bộ connection string đã mã hoá          │"
-      echo "└──────────────────────────────────────────────────────────────┘"
-      echo "INFRA_MASTER_ENCRYPTION_KEY=${ENC_KEY}"   # /dev/tty only, never captured
-      echo ""
-    } > /dev/tty 2>/dev/null || true
-    echo "(encryption key printed on your terminal only — save it now)"
-  fi
+  step "7 · fill in .env.local"
+  # `neon link` already wrote DATABASE_URL here; this only adds what is still missing.
+  run python3 scripts/ensure-env.py || return 1
 
   step "8 · install (macOS binaries)"; run pnpm install
 
