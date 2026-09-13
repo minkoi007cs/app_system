@@ -22,6 +22,13 @@
       "when": 1789274668274,
       "tag": "0002_shiny_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789275378792,
+      "tag": "0003_luxuriant_stryfe",
+      "breakpoints": true
     }
   ]
 }

@@ -3,12 +3,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AuditPage() {
-  await requireAdminSession();
+  await requireSuperAdmin();
   const logs = await listAuditLogs(db(), { limit: 100 });
 
   return (

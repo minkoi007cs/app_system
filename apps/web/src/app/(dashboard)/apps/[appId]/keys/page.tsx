@@ -7,12 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { IssueKeyForm } from '@/components/issue-key-form';
 import { KeyRowActions } from '@/components/key-row-actions';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function KeysPage({ params }: { params: Promise<{ appId: string }> }) {
-  await requireAdminSession();
+  await requireSuperAdmin();
   const { appId } = await params;
 
   const app = await getAppById(db(), appId);

@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { HealthButton } from '@/components/health-button';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HealthPage() {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   const apps = await listAppsForOwner(db(), session.userId);
 
   const rows = await Promise.all(

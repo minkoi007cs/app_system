@@ -14,7 +14,13 @@ export async function currentSession(): Promise<AdminSession | null> {
   return { userId: session.user.id, email: session.user.email, name: session.user.name };
 }
 
-/** Guard for every dashboard route and server action. */
+/**
+ * Plain session guard — authentication only.
+ *
+ * Dashboard routes use requireSuperAdmin() in lib/admin.ts instead, which also checks the email
+ * allowlist, the platform-admin row and the MFA challenge. Keep this one for pages that need
+ * nothing more than "somebody is signed in".
+ */
 export async function requireAdminSession(): Promise<AdminSession> {
   const session = await currentSession();
   if (session === null) redirect('/sign-in');

@@ -12,7 +12,7 @@ import {
 } from '@infra/db';
 import { db } from '@/lib/db';
 import { resolver } from '@/lib/resolver';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export interface DatabaseActionState {
   ok: boolean;
@@ -25,7 +25,7 @@ export async function saveDatabaseAction(
   _prev: DatabaseActionState,
   formData: FormData,
 ): Promise<DatabaseActionState> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   const appId = String(formData.get('appId') ?? '');
   const provider = String(formData.get('provider') ?? '') as DbProvider;
   const label = String(formData.get('label') ?? '').trim() || 'primary';
@@ -56,7 +56,7 @@ export async function saveDatabaseAction(
 }
 
 export async function checkHealthAction(appId: string): Promise<DatabaseActionState> {
-  await requireAdminSession();
+  await requireSuperAdmin();
   try {
     const adapter = await resolver().resolve(appId);
     const report = await adapter.health();
@@ -72,7 +72,7 @@ export async function checkHealthAction(appId: string): Promise<DatabaseActionSt
 }
 
 export async function deleteDatabaseAction(appId: string, configId: string): Promise<void> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   await deleteDatabaseConfig(db(), configId);
   await resolver().invalidate(appId);
   await recordAudit(db(), {

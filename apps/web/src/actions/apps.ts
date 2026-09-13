@@ -11,7 +11,7 @@ import {
   type AppStatus,
 } from '@infra/db';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export interface ActionState {
   ok: boolean;
@@ -27,7 +27,7 @@ function toMessage(error: unknown): string {
 }
 
 export async function createAppAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
 
   const slug = String(formData.get('slug') ?? '').trim();
   const name = String(formData.get('name') ?? '').trim();
@@ -61,7 +61,7 @@ export async function createAppAction(_prev: ActionState, formData: FormData): P
 }
 
 export async function setAppStatusAction(appId: string, status: AppStatus): Promise<void> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   await setAppStatus(db(), appId, status);
   await recordAudit(db(), {
     appId,
@@ -76,7 +76,7 @@ export async function setAppStatusAction(appId: string, status: AppStatus): Prom
 }
 
 export async function updateOriginsAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   const appId = String(formData.get('appId') ?? '');
   const origins = String(formData.get('origins') ?? '')
     .split(/[\s,]+/)

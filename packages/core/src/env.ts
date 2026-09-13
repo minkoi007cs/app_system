@@ -25,6 +25,8 @@ export const serverEnvSchema = z.object({
   MICROSOFT_CLIENT_ID: z.string().optional(),
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
 
+  /** Comma-separated emails allowed to hold platform admin rights. Not editable from the UI. */
+  INFRA_SUPER_ADMIN_EMAILS: z.string().optional(),
   INFRA_PUBLIC_URL: z.string().min(1).default('http://localhost:3000'),
   INFRA_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
@@ -59,6 +61,18 @@ export function serverEnv(): ServerEnv {
 /** Test helper — forces the next serverEnv() call to re-read process.env. */
 export function resetServerEnvCache(): void {
   cached = null;
+}
+
+/** Parses the allowlist. An empty list means nobody can hold admin rights — deliberately. */
+export function superAdminEmails(env: Pick<ServerEnv, 'INFRA_SUPER_ADMIN_EMAILS'>): string[] {
+  return (env.INFRA_SUPER_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => email !== '');
+}
+
+export function isSuperAdminEmail(email: string, allowlist: readonly string[]): boolean {
+  return allowlist.includes(email.trim().toLowerCase());
 }
 
 export type OAuthProvider = 'google' | 'github' | 'microsoft';

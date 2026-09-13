@@ -27,6 +27,8 @@ export const session = pgTable(
     /** App the session is currently acting in — set by the app-scope plugin. */
     activeAppId: uuid('active_app_id').references(() => infraApps.id, { onDelete: 'set null' }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    /** When this session last cleared an MFA challenge. Admin routes re-challenge after 8 hours. */
+    mfaVerifiedAt: timestamp('mfa_verified_at', { withTimezone: true }),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

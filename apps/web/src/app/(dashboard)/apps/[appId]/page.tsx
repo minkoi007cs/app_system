@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OriginsForm } from '@/components/origins-form';
 import { StatusButtons } from '@/components/status-buttons';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AppOverviewPage({ params }: { params: Promise<{ appId: string }> }) {
-  await requireAdminSession();
+  await requireSuperAdmin();
   const { appId } = await params;
 
   const app = await getAppById(db(), appId);

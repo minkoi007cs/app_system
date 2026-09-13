@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.4.0-rc.1** |
+| Current version | **v0.4.0-rc.2** |
 | Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
-| Last test | `PASS` — 13 test files, **139 tests** (core 74 · adapters 30 · sdk 12 · web 15 · db 8) |
-| Next task | **T5.7** — `infra_platform_admins` + allowlist email + MFA bắt buộc cho super admin |
+| Last test | `PASS` — 14 test files, **184 tests** (core 119 · adapters 30 · web 15 · sdk 12 · db 8) |
+| Next task | **T5.9** — Passkey/WebAuthn (cần thêm dependency `@simplewebauthn/server`) |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -100,8 +100,8 @@ pnpm install && pnpm build && pnpm test
 - [x] **T5.4** `/api/v1/auth/{token,refresh,revoke}` + CORS động theo `allowed_origins` ✅
 - [x] **T5.5** Đổi `/api/v1/me` từ cookie sang Bearer token (§4.3 blueprint) ✅
 - [x] **T5.6** **Tách `pk_` / `sk_`** — thêm `key_type`, chặn `sk_` gọi từ trình duyệt (§4.1) ✅
-- [ ] **T5.7** `infra_platform_admins` + allowlist email + MFA bắt buộc cho super admin
-- [ ] **T5.8** MFA: TOTP + backup codes + `infra_mfa_factors` (nhiều yếu tố/user)
+- [x] **T5.7** `infra_platform_admins` + allowlist email + MFA bắt buộc cho super admin ✅
+- [x] **T5.8** MFA: TOTP + backup codes + `infra_mfa_factors` (nhiều yếu tố/user) ✅
 - [ ] **T5.9** Passkey/WebAuthn: đăng ký + đăng nhập + discoverable credentials
 - [ ] **T5.10** Step-up auth + `infra_trusted_devices`
 - [ ] **T5.11** Session & device management: danh sách, thu hồi từng phiên/tất cả, idle + absolute timeout

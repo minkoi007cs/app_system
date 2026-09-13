@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Activity, Boxes, ScrollText } from 'lucide-react';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 import { SignOutButton } from '@/components/sign-out-button';
 
 export const dynamic = 'force-dynamic';
@@ -12,14 +12,15 @@ const NAV = [
 ] as const;
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireAdminSession();
+  const admin = await requireSuperAdmin();
 
   return (
     <div className="flex min-h-screen">
       <aside className="bg-muted/30 hidden w-60 shrink-0 flex-col border-r p-4 sm:flex">
         <div className="mb-6">
           <p className="text-sm font-semibold">Unified-App-Infra</p>
-          <p className="text-muted-foreground truncate text-xs">{session.email}</p>
+          <p className="text-muted-foreground truncate text-xs">{admin.email}</p>
+          <p className="text-muted-foreground text-[10px] uppercase tracking-wide">{admin.role}</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map((item) => (

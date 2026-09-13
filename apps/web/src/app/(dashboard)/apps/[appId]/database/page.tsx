@@ -7,12 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DatabaseForm } from '@/components/database-form';
 import { HealthButton } from '@/components/health-button';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DatabasePage({ params }: { params: Promise<{ appId: string }> }) {
-  await requireAdminSession();
+  await requireSuperAdmin();
   const { appId } = await params;
 
   const app = await getAppById(db(), appId);

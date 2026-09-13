@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreateAppForm } from '@/components/create-app-form';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,7 @@ const STATUS_VARIANT = {
 } as const;
 
 export default async function AppsPage() {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   const apps = await listAppsForOwner(db(), session.userId);
 
   return (

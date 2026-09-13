@@ -22,6 +22,13 @@ export function appScopePlugin(): BetterAuthPlugin {
             input: false,
             fieldName: 'active_app_id',
           },
+          /** Set by the MFA challenge; admin routes refuse a stale value. */
+          mfaVerifiedAt: {
+            type: 'date',
+            required: false,
+            input: false,
+            fieldName: 'mfa_verified_at',
+          },
         },
       },
     },

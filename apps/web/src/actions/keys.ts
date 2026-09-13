@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import type { ApiKeyKind, ApiKeyScope } from '@infra/core';
 import { issueApiKey, recordAudit, revokeApiKey, rotateApiKey } from '@infra/db';
 import { db } from '@/lib/db';
-import { requireAdminSession } from '@/lib/session';
+import { requireSuperAdmin } from '@/lib/admin';
 
 export interface IssueKeyState {
   ok: boolean;
@@ -16,7 +16,7 @@ export interface IssueKeyState {
 const ALL_SCOPES: ApiKeyScope[] = ['db:read', 'db:write', 'auth:read', 'admin'];
 
 export async function issueKeyAction(_prev: IssueKeyState, formData: FormData): Promise<IssueKeyState> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   const appId = String(formData.get('appId') ?? '');
   const name = String(formData.get('name') ?? '').trim() || 'untitled key';
   const environment = formData.get('environment') === 'test' ? 'test' : 'live';
@@ -51,7 +51,7 @@ export async function issueKeyAction(_prev: IssueKeyState, formData: FormData): 
 }
 
 export async function revokeKeyAction(appId: string, keyId: string): Promise<void> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   await revokeApiKey(db(), keyId);
   await recordAudit(db(), {
     appId,
@@ -65,7 +65,7 @@ export async function revokeKeyAction(appId: string, keyId: string): Promise<voi
 }
 
 export async function rotateKeyAction(appId: string, keyId: string): Promise<IssueKeyState> {
-  const session = await requireAdminSession();
+  const session = await requireSuperAdmin();
   const issued = await rotateApiKey(db(), keyId, session.userId);
   await recordAudit(db(), {
     appId,
