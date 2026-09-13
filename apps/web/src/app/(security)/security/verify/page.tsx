@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import { evaluateAdminGate } from '@/lib/admin';
+import { listPasskeys } from '@infra/db';
+import { db } from '@/lib/db';
 import { VerifyMfaForm } from '@/components/verify-mfa-form';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +13,8 @@ export default async function VerifyPage() {
   if (gate.state === 'needs-enrolment') redirect('/security/enrol');
   if (gate.state === 'ok') redirect('/apps');
 
+  const passkeys = await listPasskeys(db(), gate.context.userId);
+
   return (
     <>
       <div>
@@ -20,7 +24,7 @@ export default async function VerifyPage() {
           Administrator sessions re-confirm every 8 hours.
         </p>
       </div>
-      <VerifyMfaForm />
+      <VerifyMfaForm hasPasskey={passkeys.length > 0} />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, Boxes, ScrollText } from 'lucide-react';
+import { Activity, Boxes, ScrollText, ShieldCheck } from 'lucide-react';
 import { requireSuperAdmin } from '@/lib/admin';
 import { SignOutButton } from '@/components/sign-out-button';
 
@@ -9,6 +9,7 @@ const NAV = [
   { href: '/apps', label: 'Applications', icon: Boxes },
   { href: '/health', label: 'Health', icon: Activity },
   { href: '/audit', label: 'Audit log', icon: ScrollText },
+  { href: '/security/sessions', label: 'Security', icon: ShieldCheck },
 ] as const;
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

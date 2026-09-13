@@ -11,6 +11,7 @@ import {
   startTotpEnrolment,
   verifyMfaCode,
 } from '@infra/db';
+import { rememberThisDevice } from '@/actions/passkey';
 import { db } from '@/lib/db';
 
 export interface MfaState {
@@ -84,10 +85,12 @@ export async function activateEnrolmentAction(_prev: MfaState, formData: FormDat
 
 export async function verifyChallengeAction(_prev: MfaState, formData: FormData): Promise<MfaState> {
   const code = String(formData.get('code') ?? '');
+  const remember = formData.get('remember') === 'on';
   try {
     const admin = await currentAdmin();
     const verification = await verifyMfaCode(db(), admin.userId, code);
     await markSessionMfaVerified(db(), admin.sessionId);
+    if (remember) await rememberThisDevice(admin.userId);
 
     await recordAudit(db(), {
       actorType: 'admin',

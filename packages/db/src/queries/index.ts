@@ -8,3 +8,5 @@ export * from './refresh-tokens.js';
 export * from './mfa.js';
 export * from './platform-admins.js';
 export * from './sessions.js';
+export * from './webauthn.js';
+export * from './trusted-devices.js';

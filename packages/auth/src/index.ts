@@ -18,3 +18,4 @@ export {
 } from '@infra/db';
 export * from './server.js';
 export * from './tokens.js';
+export * from './passkey.js';

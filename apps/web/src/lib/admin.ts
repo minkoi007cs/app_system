@@ -9,16 +9,18 @@
  * They are separate so that one bug — a bad RBAC check, a stray insert, a stolen session — is
  * never enough on its own. Whoever holds this level can decrypt every app's database credentials.
  */
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { auth } from '@infra/auth';
 import { isSuperAdminEmail, parseServerEnv, superAdminEmails } from '@infra/core';
 import {
   ensurePlatformAdmin,
+  findTrustedDevice,
   getPlatformAdmin,
   hasVerifiedMfa,
   mfaStillFresh,
   touchPlatformAdmin,
+  TRUSTED_DEVICE_COOKIE,
 } from '@infra/db';
 import { db } from './db';
 
@@ -32,6 +34,7 @@ export interface AdminContext {
   role: string;
   mfaEnrolled: boolean;
   mfaFresh: boolean;
+  trustedDevice: boolean;
 }
 
 export type AdminGate =
@@ -59,7 +62,10 @@ export async function evaluateAdminGate(): Promise<AdminGate> {
   const verifiedAt = (session.session as { mfaVerifiedAt?: Date | string | null }).mfaVerifiedAt ?? null;
   const parsedVerifiedAt =
     verifiedAt === null ? null : verifiedAt instanceof Date ? verifiedAt : new Date(verifiedAt);
-  const mfaFresh = mfaStillFresh(parsedVerifiedAt, ADMIN_MFA_MAX_AGE_HOURS);
+  // A device the admin explicitly chose to remember skips the challenge until the grant expires.
+  const deviceToken = (await cookies()).get(TRUSTED_DEVICE_COOKIE)?.value ?? null;
+  const trusted = mfaEnrolled ? await findTrustedDevice(db(), session.user.id, deviceToken) : null;
+  const mfaFresh = mfaStillFresh(parsedVerifiedAt, ADMIN_MFA_MAX_AGE_HOURS) || trusted !== null;
 
   const context: AdminContext = {
     userId: session.user.id,
@@ -69,6 +75,7 @@ export async function evaluateAdminGate(): Promise<AdminGate> {
     role: admin.role,
     mfaEnrolled,
     mfaFresh,
+    trustedDevice: trusted !== null,
   };
 
   void touchPlatformAdmin(db(), session.user.id).catch(() => {});

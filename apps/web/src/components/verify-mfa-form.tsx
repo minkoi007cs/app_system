@@ -1,17 +1,19 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { verifyChallengeAction, type MfaState } from '@/actions/mfa';
 import { Button } from '@/components/ui/button';
+import { PasskeyChallengeButton } from '@/components/passkey-challenge-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const INITIAL: MfaState = { ok: false, message: '' };
 
-export function VerifyMfaForm() {
+export function VerifyMfaForm({ hasPasskey }: { hasPasskey: boolean }) {
   const router = useRouter();
+  const [remember, setRemember] = useState(false);
   const [state, action, pending] = useActionState(verifyChallengeAction, INITIAL);
 
   useEffect(() => {
@@ -42,10 +44,25 @@ export function VerifyMfaForm() {
               {state.message}
             </p>
           ) : null}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="remember"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+            />
+            Remember this browser for 30 days
+          </label>
           <Button type="submit" disabled={pending}>
             {pending ? 'Checking…' : 'Verify'}
           </Button>
         </form>
+
+        {hasPasskey ? (
+          <div className="mt-4 flex flex-col gap-2 border-t pt-4">
+            <PasskeyChallengeButton rememberDevice={remember} />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

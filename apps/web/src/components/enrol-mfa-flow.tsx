@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { activateEnrolmentAction, startEnrolmentAction, type MfaState } from '@/actions/mfa';
+import { AddPasskeyButton } from '@/components/add-passkey-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -63,8 +64,19 @@ export function EnrolMfaFlow() {
               setStarting(false);
             }}
           >
-            {starting ? 'Preparing…' : 'Start setup'}
+            {starting ? 'Preparing…' : 'Set up an authenticator app'}
           </Button>
+          <div className="flex items-center gap-2">
+            <span className="bg-border h-px flex-1" />
+            <span className="text-muted-foreground text-xs">or</span>
+            <span className="bg-border h-px flex-1" />
+          </div>
+          <AddPasskeyButton label="Use a passkey (Touch ID, Windows Hello, phone)" />
+          <p className="text-muted-foreground text-xs">
+            A passkey is phishing-resistant: it is bound to this site&apos;s domain, so a lookalike
+            page cannot trick your device into signing for it. An authenticator code can be typed
+            into the wrong site; a passkey cannot.
+          </p>
         </CardContent>
       </Card>
     );

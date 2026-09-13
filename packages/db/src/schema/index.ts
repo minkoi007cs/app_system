@@ -6,5 +6,6 @@ export * from './signing-keys.js';
 export * from './refresh-tokens.js';
 export * from './platform-admins.js';
 export * from './mfa.js';
+export * from './webauthn.js';
 export * from './auth.js';
 export * from './relations.js';

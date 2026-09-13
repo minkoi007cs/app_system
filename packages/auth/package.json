@@ -27,6 +27,7 @@
   "dependencies": {
     "@infra/core": "workspace:^",
     "@infra/db": "workspace:^",
-    "better-auth": "^1.7.4"
+    "better-auth": "^1.7.4",
+    "@simplewebauthn/server": "^13.2.2"
   }
 }
