@@ -10,3 +10,5 @@ export * from './platform-admins.js';
 export * from './sessions.js';
 export * from './webauthn.js';
 export * from './trusted-devices.js';
+export * from './access.js';
+export * from './workspaces.js';

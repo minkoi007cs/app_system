@@ -5,6 +5,7 @@ import { InfraError } from '@infra/core';
 import {
   addMember,
   createApp,
+  seedSystemRoles,
   recordAudit,
   setAppStatus,
   updateAllowedOrigins,
@@ -43,6 +44,8 @@ export async function createAppAction(_prev: ActionState, formData: FormData): P
       ownerUserId: session.userId,
     });
     await addMember(db(), app.id, session.userId, 'owner');
+    // Every app starts with owner/admin/member/viewer so policies have something to bind to.
+    await seedSystemRoles(db(), app.id);
     await recordAudit(db(), {
       appId: app.id,
       actorType: 'admin',

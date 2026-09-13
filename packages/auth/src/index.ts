@@ -19,3 +19,4 @@ export {
 export * from './server.js';
 export * from './tokens.js';
 export * from './passkey.js';
+export * from './access.js';

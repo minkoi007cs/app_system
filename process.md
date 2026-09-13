@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.4.0-rc.3** |
+| Current version | **v0.4.0-rc.4** |
 | Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
-| Last test | `PASS` — 14 test files, **184 tests** (core 119 · adapters 30 · web 15 · sdk 12 · db 8) |
-| Next task | **T5.12** — RBAC: `infra_roles`, `infra_role_assignments`, khớp permission wildcard |
+| Last test | `PASS` — 16 test files, **221 tests** (core 156 · adapters 30 · web 15 · sdk 12 · db 8) |
+| Next task | **T5.16** — vòng đời user (mời / chuyển / offboard) · rồi đóng gate **G5** |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -105,10 +105,10 @@ pnpm install && pnpm build && pnpm test
 - [x] **T5.9** Passkey/WebAuthn: đăng ký + đăng nhập + chống clone theo signature counter ✅
 - [x] **T5.10** Step-up auth + `infra_trusted_devices` (ghi nhớ trình duyệt 30 ngày) ✅
 - [x] **T5.11** Session & device management: trang /security/sessions ✅ (thu hồi từng phiên: T8)
-- [ ] **T5.12** RBAC: `infra_roles`, `infra_role_assignments`, catalog permission, khớp wildcard
-- [ ] **T5.13** ABAC: `infra_policies` + engine đánh giá + deny thắng allow + mặc định từ chối
-- [ ] **T5.14** `check()` API + decision log vào `infra_audit_logs`
-- [ ] **T5.15** Workspace schema (`infra_workspaces`, `infra_workspace_members`, `workspace_id` NULLABLE)
+- [x] **T5.12** RBAC: `infra_roles`, `infra_role_assignments`, catalog permission, khớp wildcard ✅
+- [x] **T5.13** ABAC: `infra_policies` + engine + deny thắng allow + mặc định từ chối ✅
+- [x] **T5.14** `checkAccess()` + decision log vào `infra_audit_logs` ✅
+- [x] **T5.15** Workspace schema (`infra_workspaces`, `infra_workspace_members`, `workspace_id` NULLABLE) ✅
 - [ ] **T5.16** Vòng đời user: mời, chuyển, vô hiệu hoá, offboard (thu hồi mọi token), soft delete + purge
 - [ ] **T5.17** `infra_service_accounts` + grant `client_credentials`
 - [ ] **T5.18** Chống dò mật khẩu, kiểm mật khẩu đã lộ (HIBP k-anonymity), luồng khôi phục tài khoản

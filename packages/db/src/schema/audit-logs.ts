@@ -24,6 +24,13 @@ export const AUDIT_ACTIONS = [
   'auth.token.revoked',
   'auth.token.reuse_detected',
   'auth.signin.failed',
+  'access.granted',
+  'access.denied',
+  'role.assigned',
+  'role.revoked',
+  'policy.created',
+  'policy.updated',
+  'policy.deleted',
   'health.check',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

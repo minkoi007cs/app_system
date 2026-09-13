@@ -7,5 +7,7 @@ export * from './refresh-tokens.js';
 export * from './platform-admins.js';
 export * from './mfa.js';
 export * from './webauthn.js';
+export * from './access.js';
+export * from './workspaces.js';
 export * from './auth.js';
 export * from './relations.js';
