@@ -9,7 +9,14 @@ import { index, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-c
 import { infraApps } from './apps.js';
 import { user } from './auth.js';
 
-export const REFRESH_REVOKE_REASONS = ['rotated', 'reuse_detected', 'logout', 'offboard', 'expired'] as const;
+export const REFRESH_REVOKE_REASONS = [
+  'rotated',
+  'reuse_detected',
+  'logout',
+  'offboard',
+  'expired',
+  'password_reset',
+] as const;
 export type RefreshRevokeReason = (typeof REFRESH_REVOKE_REASONS)[number];
 
 export const infraRefreshTokens = pgTable(

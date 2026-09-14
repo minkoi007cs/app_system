@@ -11,5 +11,6 @@ export * from './access.js';
 export * from './workspaces.js';
 export * from './lifecycle.js';
 export * from './service-accounts.js';
+export * from './security.js';
 export * from './auth.js';
 export * from './relations.js';
