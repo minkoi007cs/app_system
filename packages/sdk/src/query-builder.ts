@@ -12,6 +12,13 @@
 import { request } from './http.js';
 import type { InfraClientOptions, Result } from './types.js';
 
+export interface BuilderAuth {
+  /** Options carrying this request's access token. */
+  prepare: () => Promise<InfraClientOptions>;
+  /** Runs the call, refreshing and retrying once if the server says the token is stale. */
+  retry: <T>(run: (headers: Record<string, string>) => Promise<Result<T>>) => Promise<Result<T>>;
+}
+
 export type JsonScalar = string | number | boolean | null;
 
 export type QueryFilter =
@@ -50,6 +57,12 @@ export class QueryBuilder<R = Record<string, unknown>> {
   constructor(
     private readonly options: InfraClientOptions,
     private readonly resource: string,
+    /**
+     * Supplied by the server client so each call carries that request's own access token and
+     * retries once on a 401. Absent in the browser client, where the options already hold
+     * everything and there is only ever one user.
+     */
+    private readonly auth?: BuilderAuth,
   ) {}
 
   /** Accepts `select('id', 'title')` or `select(['id', 'title'])` — both spellings are common. */
@@ -170,12 +183,20 @@ export class QueryBuilder<R = Record<string, unknown>> {
   }
 
   async run(): Promise<Result<QueryResponse<R>>> {
-    return request<QueryResponse<R>>(this.options, {
-      method: 'POST',
-      path: `/api/v1/data/${encodeURIComponent(this.resource)}`,
-      body: this.toJSON(),
-      useApiKey: true,
-    });
+    const path = `/api/v1/data/${encodeURIComponent(this.resource)}`;
+    const body = this.toJSON();
+
+    if (this.auth === undefined) {
+      return request<QueryResponse<R>>(this.options, { method: 'POST', path, body, useApiKey: true });
+    }
+
+    const base = await this.auth.prepare();
+    return this.auth.retry<QueryResponse<R>>((headers) =>
+      request<QueryResponse<R>>(
+        { ...base, headers: { ...(base.headers ?? {}), ...headers } },
+        { method: 'POST', path, body, useApiKey: true },
+      ),
+    );
   }
 
   /** Alias of run(). */

@@ -77,6 +77,47 @@ export async function revokeRoleAssignment(db: MasterDatabase, assignmentId: str
   await db.delete(infraRoleAssignments).where(eq(infraRoleAssignments.id, assignmentId));
 }
 
+export interface RoleAssignmentSummary {
+  id: string;
+  subjectType: SubjectType;
+  subjectId: string;
+  roleKey: string;
+  roleName: string;
+  permissions: string[];
+  scopeType: ScopeType;
+  scopeId: string | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Every grant that applies to this app, joined to the role it names.
+ *
+ * Includes grants of platform-wide roles (`infra_roles.app_id is null`) scoped to this app, since
+ * those are exactly the ones an admin is most likely to have forgotten about.
+ */
+export async function listRoleAssignments(
+  db: MasterDatabase,
+  appId: string,
+): Promise<RoleAssignmentSummary[]> {
+  return db
+    .select({
+      id: infraRoleAssignments.id,
+      subjectType: infraRoleAssignments.subjectType,
+      subjectId: infraRoleAssignments.subjectId,
+      roleKey: infraRoles.key,
+      roleName: infraRoles.name,
+      permissions: infraRoles.permissions,
+      scopeType: infraRoleAssignments.scopeType,
+      scopeId: infraRoleAssignments.scopeId,
+      expiresAt: infraRoleAssignments.expiresAt,
+      createdAt: infraRoleAssignments.createdAt,
+    })
+    .from(infraRoleAssignments)
+    .innerJoin(infraRoles, eq(infraRoleAssignments.roleId, infraRoles.id))
+    .where(or(eq(infraRoleAssignments.scopeId, appId), eq(infraRoles.appId, appId)));
+}
+
 export interface EffectivePermissions {
   roleKeys: string[];
   permissions: string[];

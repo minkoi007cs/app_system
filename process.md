@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.6.0** |
-| Current phase | **Phase 7 (Data API Gateway) hoàn tất — gate G7 đóng** |
+| Current version | **v0.6.2** |
+| Current phase | **Phase 8 đang chạy — T8.1→T8.6 xong, còn T8.7 (tích hợp app con thật)** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 33 test files, **465 tests** (core 365 · adapters 45 · sdk 24 · web 15 · db 16) |
-| Next task | **Phase 8** — SDK v2 (`createServerClient`, tự làm mới token) + Dashboard cấu hình rules |
+| Last test | `PASS` — 35 test files, **492 tests** (core 365 · sdk 51 · adapters 45 · web 15 · db 16) |
+| Next task | **T8.7** — tích hợp thật một app con làm bằng chứng dưới 10 dòng |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -133,13 +133,13 @@ pnpm install && pnpm build && pnpm test
 - [x] **T7.6** Test: cố tình vượt rào rules, SQL injection qua DSL, nới rộng filter ✅
 - [x] **G7** Gate → bump **v0.6.0** ✅
 
-### Phase 8 — SDK v2 & Dashboard hoàn chỉnh  `NOT STARTED`  ← giai đoạn 4
-- [ ] **T8.1** `createServerClient()` cho BFF (token nằm ở server app con)
-- [ ] **T8.2** Tự refresh token + hàng đợi request khi token hết hạn
-- [ ] **T8.3** `infra.from(...)` query builder phía client
-- [ ] **T8.4** UI: quản lý role/permission/policy
-- [ ] **T8.5** UI: MFA, passkey, danh sách thiết bị & phiên
-- [ ] **T8.6** UI: service account, workspace
+### Phase 8 — SDK v2 & Dashboard hoàn chỉnh  `IN PROGRESS`  ← giai đoạn 4
+- [x] **T8.1** `createServerClient()` cho BFF (token nằm ở server app con) ✅
+- [x] **T8.2** Tự refresh token + hàng đợi request khi token hết hạn ✅
+- [x] **T8.3** `infra.from(...)` query builder phía client ✅
+- [x] **T8.4** UI: quản lý role/permission/policy ✅
+- [x] **T8.5** UI: MFA, passkey, danh sách thiết bị & phiên ✅
+- [x] **T8.6** UI: service account, workspace ✅
 - [ ] **T8.7** Tích hợp thật một app con (AI Study OS) làm bằng chứng dưới 10 dòng
 - [ ] **G8** Gate → **v1.0.0**
 
@@ -185,6 +185,106 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-14 · v0.6.2 · feat(dashboard): access rules, service accounts and workspaces in the ui
+
+**Deliverables**
+- `/apps/[appId]/access` — trang cấu hình **policy trước, role sau**, vì policy mới là phần người ta
+  làm sai. Mỗi dòng policy hiển thị **mảnh SQL mà nó biên dịch ra**, với giá trị của subject hiện
+  dưới dạng placeholder đọc được (`:current_user`). Đây là điểm chính của cả trang: một màn hình
+  rules chỉ liệt kê tên policy thì **không nói gì** về việc nó thực sự làm gì — nhìn thấy SQL mới là
+  thứ khiến "policy này cho phép nhiều hơn mình tưởng" bị bắt **trước khi** lên production chứ không
+  phải sau.
+- Form policy có **từ vựng cố tình nhỏ**: tối đa 3 mệnh đề AND với nhau, thay vì trình soạn cây tự
+  do. Các hình dạng người ta thực sự viết ("dòng của tôi", "dòng trong workspace của tôi", "dòng chưa
+  xoá mềm") đều vừa, mà **một UI diễn đạt được mọi thứ là một UI không ai liếc qua mà biết policy làm gì**.
+- **Từ chối thẳng một tổ hợp**: `allow` + resource `*` + điều kiện `always` — đó là "tắt bộ lọc dòng",
+  và nó phải là một hành động có chủ đích chứ không phải hai cái dropdown. Chọn `always` + `allow`
+  trên một bảng cụ thể thì hiện cảnh báo tại chỗ.
+- App chưa có policy nào thì trang nói thẳng: **mọi request qua `/api/v1/data` đang bị từ chối** —
+  đó là mặc định an toàn, và cũng là lý do một app mới đọc không ra gì cho tới khi có người viết
+  policy ở đây. Nói ra tốt hơn để người dùng tự đoán.
+- Grant có **hạn tự hết** (1/7/30 ngày, hoặc không) và cột `Expires` tô vàng chữ "never" — một grant
+  tự hết hạn là loại an toàn nhất vì không ai phải nhớ đi thu lại.
+- Permission được **parse** chứ không chỉ khớp regex, nên một permission viết sai bị chặn ngay tại
+  form thay vì lọt xuống và âm thầm không khớp gì cả trong `hasPermission`.
+- `/apps/[appId]/machines` — service account + workspace. Cột IP allowlist tô vàng chữ "anywhere"
+  khi để trống. Mỗi entry được kiểm bằng cách **đem khớp với chính nó**: một CIDR viết sai sẽ không
+  khớp gì cả, tức là âm thầm khoá tài khoản khỏi *mọi nơi* thay vì giới hạn nó ở *một nơi*.
+- Khoá service account trả về **đúng một lần** qua `RevealOnce`, và luôn là `sk_`.
+
+**Modified files**
+- `packages/db/src/queries/access.ts` (edit — `listRoleAssignments`)
+- `apps/web/src/actions/{access,machines}.ts` (new)
+- `apps/web/src/app/(dashboard)/apps/[appId]/{access,machines}/page.tsx` (new)
+- `apps/web/src/components/{policy-form,policy-row-actions,create-role-form,assign-role-form,assignment-row-actions,service-account-form,service-account-row-actions,workspace-form}.tsx` (new)
+- `apps/web/src/app/(dashboard)/apps/[appId]/page.tsx` (edit — link sang 2 trang mới)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package, `next build` thêm 2 route)
+- `pnpm test`  → PASS (492 passed / 492)
+- Không có migration mới.
+
+**Notes / decisions**
+- **T8.5 đánh dấu xong mà không viết thêm gì**: MFA factor, passkey, thiết bị đã nhớ và danh sách
+  phiên đều đã nằm ở `/security/sessions` từ Phase 5. Thêm một trang nữa chỉ là lặp lại.
+- Preview SQL **render phía server**. Biên dịch cần `compileCondition` từ `@infra/core`, mà package
+  đó re-export cả `node:crypto` qua index — kéo nó vào client component sẽ vỡ bundle trình duyệt.
+
+**Next task** → `T8.7` tích hợp thật một app con (AI Study OS) làm bằng chứng dưới 10 dòng, rồi đóng
+gate G8.
+
+### 2026-09-14 · v0.6.1 · feat(sdk): request-scoped server client and single-flight token refresh
+
+**Deliverables**
+- `token-manager.ts` — **hàng đợi refresh ở đây không phải tối ưu, mà là điều kiện đúng đắn.**
+  Access token sống 10 phút. Cách xử lý ngây thơ (để hết hạn → nhận 401 → refresh → thử lại) hỏng
+  vì đúng một tính năng nền tảng này cố tình có: refresh token **xoay vòng**, và một token dùng lại
+  sẽ kích hoạt reuse detection, **thu hồi toàn bộ session trong family** (`rotateRefreshToken`).
+  Nên khi một trang bắn 5 request song song với token cũ: 5 cái 401, 5 lượt refresh khởi động, một
+  cái thắng, **4 cái còn lại trình ra token server vừa đốt**. Server làm đúng thứ nó được xây để
+  làm — kết luận token bị đánh cắp và đăng xuất người dùng khỏi mọi nơi. Người dùng thấy "app tự
+  đăng xuất khi tải nặng", mà **mọi tầng đều đang hành xử đúng**.
+  Bốn luật rút ra:
+  · **Single-flight** — người đầu tiên cần refresh thì khởi động, mọi người còn lại *await cùng một
+    promise*. Một lượt gọi mạng, một lượt xoay, một token mới cho tất cả.
+  · **Chủ động** — refresh *trước* khi hết hạn 60 giây, nên thường không ai phải chờ và không
+    request nào nhìn thấy 401.
+  · **Thử lại đúng một lần, không bao giờ lặp** — 401 sống sót qua một token vừa mới đúc là từ chối
+    thật, và thử lại nó là cách biến một request bị từ chối thành một lệnh cấm vì quá tải.
+  · **Family bị thu hồi là điểm cuối** — không còn gì để thử lại; xoá trạng thái và báo ra, thay vì
+    nện vào một endpoint sẽ từ chối mãi.
+- `server-client.ts` — khác `createInfraClient` **không phải ở danh sách tính năng mà ở vòng đời**.
+  Client trình duyệt là một object phục vụ một người dùng suốt thời gian mở tab. Client server
+  *trông giống hệt* nhưng không phải: cùng một tiến trình phục vụ hàng nghìn người, và **bất kỳ
+  trạng thái người dùng nào sống lâu hơn một request đều là rò rỉ chéo người dùng** — token của A
+  nằm trong biến module rồi phục vụ trang của B, B thấy dữ liệu của A, **không có lỗi ở đâu cả**.
+  Đó là bug tìm ra từ ticket hỗ trợ chứ không từ stack trace.
+  Nên API được đẽo cho khó viết sai: `storage` là **bắt buộc**, token của mỗi request nằm ở đó;
+  client không giữ token nào của riêng nó; chạy trong trình duyệt thì **ném lỗi thẳng**.
+- Token người dùng đi trong header `x-infra-access-token`, **không bao giờ trong cookie** — hub nằm
+  ở domain riêng, và cả kiến trúc này né cookie bên thứ ba có chủ đích.
+- `signOut` **xoá cục bộ trước, gọi revoke sau**: kể cả khi không với tới hub, tiến trình này phải
+  ngừng trình ra token ngay lập tức.
+
+**Modified files**
+- `packages/sdk/src/{token-manager,server-client}.ts` (new)
+- `packages/sdk/src/{query-builder,index}.ts` (edit — móc `BuilderAuth` cho retry-once)
+- `packages/sdk/tests/{token-manager,server-client}.test.ts` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (492 passed / 492 — core 365 · sdk 51 · adapters 45 · web 15 · db 16)
+- Không có migration mới.
+
+**Notes / decisions**
+- Test quan trọng nhất của `server-client` là test **cách ly hai request đồng thời**. Kiểu hỏng đó
+  im lặng trong production (trang của B render dữ liệu của A, không lỗi ở đâu), nên nó phải có test
+  riêng chứ không phải một quy ước.
+- `T8.3` đánh dấu xong: query builder đã ship ở v0.5.1.
+
+**Next task** → `T8.4` UI quản lý role/permission/policy, rồi `T8.5`/`T8.6` và `T8.7` tích hợp thật
+một app con.
 
 ### 2026-09-14 · v0.6.0 · feat(gateway): decision log with bounded aggregation, and the adversarial suite that found a hole
 

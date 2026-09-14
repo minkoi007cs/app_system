@@ -8,3 +8,5 @@ export { createInfraClient } from './client.js';
 export { DEFAULT_TIMEOUT_MS, normaliseBaseUrl } from './http.js';
 export type * from './types.js';
 export * from './query-builder.js';
+export * from './token-manager.js';
+export * from './server-client.js';

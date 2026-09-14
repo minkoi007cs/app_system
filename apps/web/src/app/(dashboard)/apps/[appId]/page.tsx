@@ -35,6 +35,12 @@ export default async function AppOverviewPage({ params }: { params: Promise<{ ap
           <Link className="text-sm underline underline-offset-4" href={`/apps/${appId}/keys`}>
             API keys
           </Link>
+          <Link className="text-sm underline underline-offset-4" href={`/apps/${appId}/access`}>
+            Access
+          </Link>
+          <Link className="text-sm underline underline-offset-4" href={`/apps/${appId}/machines`}>
+            Machines
+          </Link>
           <Link className="text-sm underline underline-offset-4" href={`/apps/${appId}/database`}>
             Database
           </Link>
