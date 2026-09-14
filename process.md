@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.6.2** |
-| Current phase | **Phase 8 đang chạy — T8.1→T8.6 xong, còn T8.7 (tích hợp app con thật)** |
+| Current version | **v0.7.1** |
+| Current phase | **Phase 8 hoàn tất — gate G8 đóng. Cả 8 phase đã xong.** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 35 test files, **492 tests** (core 365 · sdk 51 · adapters 45 · web 15 · db 16) |
-| Next task | **T8.7** — tích hợp thật một app con làm bằng chứng dưới 10 dòng |
+| Last test | `PASS` — 36 test files, **503 tests** (core 365 · sdk 51 · adapters 45 · web 26 · db 16) |
+| Next task | **G0 · chặn v1.0**: `pnpm db:migrate` (0007→0010) — xem §4 v1.0 Readiness |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -21,10 +21,10 @@
 
 ```
 1. Pre-Flight Anchor Check   → đọc tech.md, rồi process.md. KHÔNG quét đệ quy workspace.
-2. Xác định Next Task        → lấy từ entry trên cùng của Active Worklog (§4).
+2. Xác định Next Task        → lấy từ entry trên cùng của Active Worklog (§5).
 3. Thực thi                  → chỉ làm đúng task đó.
 4. Verify                    → pnpm build && pnpm test   (cả hai phải PASS)
-5. Persist                   → ghi entry mới lên ĐẦU Active Worklog theo template §4.0
+5. Persist                   → ghi entry mới lên ĐẦU Active Worklog theo template §5.0
 6. Commit                    → Conventional Commits
 ```
 
@@ -133,14 +133,14 @@ pnpm install && pnpm build && pnpm test
 - [x] **T7.6** Test: cố tình vượt rào rules, SQL injection qua DSL, nới rộng filter ✅
 - [x] **G7** Gate → bump **v0.6.0** ✅
 
-### Phase 8 — SDK v2 & Dashboard hoàn chỉnh  `IN PROGRESS`  ← giai đoạn 4
+### Phase 8 — SDK v2 & Dashboard hoàn chỉnh  `DONE`  ← giai đoạn 4
 - [x] **T8.1** `createServerClient()` cho BFF (token nằm ở server app con) ✅
 - [x] **T8.2** Tự refresh token + hàng đợi request khi token hết hạn ✅
 - [x] **T8.3** `infra.from(...)` query builder phía client ✅
 - [x] **T8.4** UI: quản lý role/permission/policy ✅
 - [x] **T8.5** UI: MFA, passkey, danh sách thiết bị & phiên ✅
 - [x] **T8.6** UI: service account, workspace ✅
-- [ ] **T8.7** Tích hợp thật một app con (AI Study OS) làm bằng chứng dưới 10 dòng
+- [x] **T8.7** Tích hợp thật một app con (AI Study OS) làm bằng chứng dưới 10 dòng ✅
 - [ ] **G8** Gate → **v1.0.0**
 
 ---
@@ -161,9 +161,47 @@ pnpm install && pnpm build && pnpm test
 
 ---
 
-## 4. Active Worklog  *(mới nhất ở trên cùng)*
+## 4. v1.0 Readiness — khoảng cách thật giữa "xong 8 phase" và "chạy được thật"
 
-### 4.0 Template — copy khối này lên đầu §4 cho mỗi lần hoàn thành task
+> Tám phase đã xong không có nghĩa là sẵn sàng production. Mục này liệt kê **đúng những gì còn
+> thiếu**, xếp theo mức chặn. Viết ra để không ai — kể cả mình ở phiên sau — nhầm "test xanh" với
+> "chạy được".
+
+### Chặn v1.0 (phải làm)
+
+| # | Khoảng cách | Vì sao chặn | Ai làm được |
+|---|---|---|---|
+| **G0-1** | **4 migration chưa apply lên Neon** (0007→0010) | Master DB thật đang thiếu 8 bảng. Mọi thứ của Phase 5.18 trở đi sẽ lỗi runtime ngay lần gọi đầu. | Khoi (`pnpm db:migrate`) |
+| **G0-2** | **Chưa có mail transport** (R8) | Link khôi phục tài khoản hiện chỉ in ra console ở dev. Ở production nghĩa là **không ai quên mật khẩu mà lấy lại được**. | Cần chọn nhà cung cấp (Resend/SES/SMTP) rồi nối vào `deliverRecoveryLink` |
+| **G0-3** | **Rate limit nằm trong bộ nhớ tiến trình** (R11, ADR-011) | Đúng với self-host một instance. Deploy lên Vercel/serverless là **mỗi instance một bộ đếm riêng** → throttle chống dò mật khẩu bị chia cho số instance. `infra_login_attempts` đã nằm trong DB nên không ảnh hưởng; nhưng `lib/rate-limit.ts` cho `/api/v1/*` thì có. | Thay bằng store dùng chung, hoặc khoá deploy ở một instance |
+| **G0-4** | **Chưa chạy thật lần nào end-to-end** | 503 test chứng minh các mảnh đúng và đường nối khớp. Chưa có gì chứng minh một app con thật đọc được dữ liệu thật qua policy thật. | Khoi + `examples/notes-app` setup |
+
+### Nên làm trước khi có người dùng thật
+
+| # | Khoảng cách | Ghi chú |
+|---|---|---|
+| G1-1 | Không có backup/restore cho Master DB | Mất Master DB = mất mọi cấu hình app con. Neon có PITR ở free tier — cần bật và **thử restore một lần**, vì backup chưa thử khôi phục thì chưa phải backup. |
+| G1-2 | `INFRA_MASTER_ENCRYPTION_KEY` chưa có quy trình xoay | Cột `encryption_key_version` đã có sẵn, `scripts/rotate-encryption-key.py` đã có, nhưng chưa có runbook và chưa diễn tập. |
+| G1-3 | Webhook drain chưa có lịch chạy | `/api/internal/webhooks/drain` cần cron gọi. Không gọi thì sự kiện xếp hàng mãi trong `infra_webhook_deliveries`. |
+| G1-4 | Job dọn chưa có lịch | `sweepLoginAttempts`, `expireImpersonations`, `purgeSettledDeliveries` đều viết xong nhưng chưa ai gọi định kỳ. |
+| G1-5 | Chưa có CI | Mọi lần build/test tới giờ chạy thủ công trong sandbox. Một GitHub Action chạy `pnpm build && pnpm test` là rẻ và chặn được hồi quy. |
+| G1-6 | Turso chưa cấu hình lần nào | Smoke test đa nhà cung cấp mới chạy 2/3. Nhánh LibSQL của compiler có test nhưng chưa chạm database LibSQL thật. |
+
+### Rủi ro đã biết và chấp nhận
+
+| # | Rủi ro | Vì sao chấp nhận |
+|---|---|---|
+| A-1 | DNS rebinding vào webhook (R10) | `isPublicHttpUrl` kiểm trên URL và **chặn redirect**. Muốn kín hơn thì egress qua proxy ghim IP đã resolve — chưa cần ở quy mô hiện tại. |
+| A-2 | HIBP fail open (R9, ADR-020) | Có chủ đích. Đổi lại: sự cố bên thứ ba không khoá được luồng đăng ký. |
+| A-3 | Quota check fail open khi chưa có số liệu | Có chủ đích. Nhà cung cấp tự từ chối khi vượt hạn mức; check này chỉ để báo lỗi sớm và đẹp hơn. |
+| A-4 | Chưa có SAML/SCIM (ADR-015) | Quyết định của Khoi, chưa có khách hàng doanh nghiệp. |
+| A-5 | Không có đọc ẩn danh (ADR-024) | Có chủ đích. Bật nó phải là hành động có ý thức, và cơ chế chưa tồn tại. |
+
+---
+
+## 5. Active Worklog  *(mới nhất ở trên cùng)*
+
+### 5.0 Template — copy khối này lên đầu §5 cho mỗi lần hoàn thành task
 
 ```markdown
 ### YYYY-MM-DD · vX.Y.Z · <type>(<scope>): <mô tả conventional commit>
@@ -185,6 +223,92 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-14 · v0.7.1 · docs(repo): bring tech.md and the readme back in line with the system
+
+**Deliverables**
+- `tech.md` §8 viết lại. Bản cũ **dạy sai**: nó bảo dùng khoá `pk_` để chạy SQL thô và chú thích
+  "CHỈ phía server" — mâu thuẫn với chính mô hình bảo mật hiện tại theo hai hướng cùng lúc. Đây là
+  file mọi phiên đọc **đầu tiên** theo Anchor Protocol, nên sai ở đây là loại sai đắt nhất: nó
+  không chỉ lỗi thời, nó hướng dẫn người đọc làm điều nguy hiểm.
+- `tech.md` §4.0 — bảng kiểm kê **25 bảng theo phase sinh ra chúng**, thay cho câu "4 bảng nghiệp vụ".
+- `tech.md` §8.3 — bảng API surface đầy đủ, nói rõ endpoint nào có rules engine và endpoint nào không.
+- `tech.md` §8.4 — ngữ pháp Query DSL: toán tử, trần, thứ bị cấm, và **vì sao không có `like`**.
+- **ADR-017 → ADR-024** — tám quyết định của Phase 5–8 mà trước đó chỉ sống trong worklog và trong
+  comment mã nguồn. Một quyết định không nằm trong ADR log là một quyết định sẽ bị ai đó lật lại vì
+  tưởng nó tuỳ tiện.
+- `README.md` viết lại. Bản cũ nói "Phases 1–4 are implemented", liệt kê 9 bảng, và cũng dán nhãn
+  `pk_live_` là "server side only".
+- **`process.md` §5 — v1.0 Readiness.** Danh sách khoảng cách thật, chia ba mức: 4 mục **chặn v1.0**,
+  6 mục nên làm trước khi có người dùng thật, 5 rủi ro đã biết và chấp nhận có lý do.
+
+**Modified files**
+- `tech.md` (edit — §4, §8, §13) · `README.md` (rewrite) · `process.md` (edit — thêm §5)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (503 passed / 503)
+- Không đổi mã nguồn, không có migration mới.
+
+**Notes / decisions**
+- **"Xong 8 phase" không bằng "chạy được thật", và mục §5 tồn tại để không ai nhầm hai thứ đó** —
+  kể cả mình ở phiên sau. 503 test chứng minh các mảnh đúng và đường nối khớp; **chưa có gì chứng
+  minh một app con thật đọc được dữ liệu thật qua policy thật.**
+- Khoảng cách chặn nhất **không phải mã nguồn**: 4 migration chưa apply, và chưa có mailer nên
+  người quên mật khẩu không lấy lại được tài khoản.
+- Ghi rõ một thứ dễ bị bỏ sót khi deploy: `lib/rate-limit.ts` đếm trong bộ nhớ tiến trình, nên lên
+  serverless là mỗi instance một bộ đếm. `infra_login_attempts` nằm trong DB nên không dính, nhưng
+  rate limit của `/api/v1/*` thì có.
+
+**Next task** → `G0-1` chạy `pnpm db:migrate`, rồi `G0-4` chạy thật app mẫu để có bằng chứng LIVE.
+
+### 2026-09-14 · v0.7.0 · feat(examples): a child app in nine lines, and the test that proves the seam holds
+
+**Deliverables**
+- `examples/notes-app` — app con nhỏ nhất có thể: không framework, không build step. Thứ cần chứng
+  minh là **nền tảng**, không phải công sức dựng app. Trỏ sang AI Study OS chỉ là đổi `APP_SLUG` và
+  tên bảng trong `setup.mts`.
+- Bản trình duyệt đúng **chín dòng**. Khoá `pk_` nằm trong bundle — công khai theo thiết kế — và điều
+  đó an toàn vì người gọi không viết được SQL tuỳ ý và không thoát được bộ lọc dòng.
+  **Người dùng chỉ thấy note của chính họ, mà câu truy vấn không hề nhắc tới `owner_id`.** Sự cách ly
+  nằm ở policy trên hub; mã app con không biết nó tồn tại — đúng thứ một app con đáng được nhận
+  miễn phí.
+- `setup.mts` **idempotent**: chạy lần hai thì dùng lại thứ đã có thay vì chất đống bản sao. Chuyện
+  này quan trọng hơn nghe có vẻ — một script chỉ chạy được trên database sạch là script không ai dám
+  chạy, và lần chạy thứ hai luôn là lần chạy lúc đang gấp.
+- `setup.mts` bước 4 là bước thật sự quan trọng: **viết bốn policy**. Bỏ nó đi thì app không đọc
+  được gì cả. Mặc định là từ chối, và điều đó **cố ý gây khó chịu** — một nền tảng mà app mới đọc
+  được mọi thứ cho tới khi ai đó nhớ ra phải khoá lại là một nền tảng rò rỉ dữ liệu ngay ngày đầu.
+
+**🔗 T8.7 — test đường nối, thứ mà 492 test trước đó không chạm tới**
+Mọi test khác trong repo kiểm **một package**. Test này đi xuyên tất cả: lấy **đúng JSON** mà builder
+của SDK đặt lên dây, đưa vào **đúng parser** mà endpoint dùng, biên dịch với một quyết định policy
+thật, rồi kiểm câu lệnh đi ra.
+
+Đó là chỗ một nền tảng hỏng trong im lặng. SDK ship từ một package, ngữ pháp từ package khác; thêm
+một toán tử vào builder mà quên ngữ pháp, thì lỗi **chỉ hiện ra trong app của khách, lúc chạy, dưới
+dạng một cái 422 mà không bên nào giải thích được**. Nên test hợp đồng **liệt kê toàn bộ từ vựng**
+của builder chứ không lấy mẫu: 11 toán tử, 4 hành động, và khẳng định payload của builder không bao
+giờ mang một khoá mà ngữ pháp sẽ từ chối.
+
+**Modified files**
+- `examples/notes-app/{README.md,package.json,setup.mts,demo.mts}` (new)
+- `apps/web/tests/end-to-end.test.ts` (new)
+- `pnpm-workspace.yaml` · `apps/web/package.json` (edit)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (503 passed / 503 — core 365 · sdk 51 · adapters 45 · web 26 · db 16)
+- Không có migration mới.
+
+**Notes / decisions**
+- `demo.mts` chứng minh bằng **hai danh tính, một bảng**: điểm mấu chốt không phải là đọc được, mà là
+  người thứ hai **không** thấy dòng của người thứ nhất — và không dòng nào trong file đó nói thế.
+- Đã chọn dựng app mẫu trong repo thay vì nối thẳng AI Study OS: như vậy chứng minh được **ngay bây
+  giờ** trong CI mà không chặn ở việc phải có credential. Nối app thật chỉ còn là đổi hai biến.
+
+**Next task** → chạy thật: `pnpm db:migrate` cho 0007→0010, rồi `setup` app mẫu trên Neon để có bằng
+chứng LIVE chứ không chỉ bằng chứng trong test.
 
 ### 2026-09-14 · v0.6.2 · feat(dashboard): access rules, service accounts and workspaces in the ui
 
@@ -791,7 +915,7 @@ phương ngữ, policy áp phía server, tách `/api/v1/data/:resource` (pk_) kh
 
 ---
 
-## 5. Risk Register
+## 6. Risk Register
 
 | # | Rủi ro | Ảnh hưởng | Giảm thiểu |
 |---|---|---|---|
@@ -804,4 +928,5 @@ phương ngữ, policy áp phía server, tách `/api/v1/data/:resource` (pk_) kh
 | R7 | Thư mục kết nối bị gắn lại → mất file chưa commit | Cao (đã xảy ra 1 lần) | Commit git sớm và thường xuyên; giữ bản sao tài liệu trong phiên trước khi ghi xuống máy |
 | R8 | Chưa có mailer → link khôi phục không gửi được ở production | Cao (chặn luồng khôi phục thật) | `deliverRecoveryLink` in ra console ở dev và **log lỗi rõ ràng** ở production thay vì nuốt im lặng; nối transport thật ở Phase 8 |
 | R9 | HIBP nằm ngoài allowlist egress → không kiểm được mật khẩu lộ | Trung bình | Fail open có chủ đích; `breachCheckPerformed: false` vào audit để biết lần nào chưa kiểm |
+| R11 | `lib/rate-limit.ts` đếm trong bộ nhớ tiến trình → lên serverless mỗi instance một bộ đếm | Trung bình | `infra_login_attempts` nằm trong DB nên chống dò mật khẩu không dính; rate limit `/api/v1/*` thì cần store dùng chung nếu scale ngang (ADR-011) |
 | R10 | DNS rebinding: host webhook công khai nhưng resolve về địa chỉ nội bộ | Cao | `isPublicHttpUrl` chặn theo URL + **từ chối redirect**; cần chắc hơn thì egress qua proxy ghim IP đã resolve |

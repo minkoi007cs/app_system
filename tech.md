@@ -247,8 +247,30 @@ code server (không Drizzle, không Better Auth server) — nó chỉ gọi HTTP
 
 ## 4. Master Database Schema (Drizzle ORM · PostgreSQL)
 
-> 4 bảng nghiệp vụ dưới đây + các bảng do Better Auth sinh ra (`user`, `session`, `account`,
-> `verification`) cùng nằm trong Master DB.
+> **25 bảng, migration 0000 → 0010.** Bốn bảng nền tảng được mô tả chi tiết dưới đây; phần còn lại
+> thêm vào ở Phase 5–7 và định nghĩa nằm trong `packages/db/src/schema/`.
+
+### 4.0 Toàn bộ bảng, theo phase đã sinh ra chúng
+
+| Phase | Migration | Bảng |
+|---|---|---|
+| 1 | `0000` | `infra_apps` · `infra_api_keys` · `infra_database_configs` · `infra_audit_logs` |
+| — | `0000` | Better Auth: `user` · `session` · `account` · `verification` · `infra_app_members` |
+| 5 | `0001`–`0002` | `infra_signing_keys` · `infra_refresh_tokens` |
+| 5 | `0003`–`0004` | `infra_platform_admins` · `infra_mfa_factors` · `infra_trusted_devices` · `infra_webauthn_challenges` |
+| 5 | `0005` | `infra_roles` · `infra_role_assignments` · `infra_policies` · `infra_workspaces` · `infra_workspace_members` |
+| 5 | `0006` | `infra_user_lifecycle` · `infra_invitations` · `infra_service_accounts` |
+| 5 | `0007` | `infra_login_attempts` · `infra_recovery_tokens` |
+| 5 | `0008` | `infra_webhook_endpoints` · `infra_webhook_deliveries` |
+| 6 | `0009` | `infra_provisioned_resources` · `infra_provider_quotas` |
+| 6 | `0010` | `infra_impersonation_sessions` |
+
+Hai bảng đáng chú ý vì **cố tình không chứa PII**:
+
+- `infra_login_attempts` khoá theo **digest** của (scope, ip, email). Một bản dump của nó không biến
+  thành danh sách ai có tài khoản ở đây.
+- `infra_provisioned_resources` dùng `on delete set null` trên `app_id`, nên dòng này **sống lâu hơn
+  dòng app** — một project Neon còn tồn tại mà không ai biết là một slot free tier mất vĩnh viễn.
 
 ### 4.1 `infra_apps`
 
@@ -552,54 +574,82 @@ Kết quả ghi vào `infra_database_configs.health_*` và hiển thị ở `/da
 
 ## 8. Client SDK Contract (`@infra/sdk`)
 
-Mục tiêu: child app dùng được trong **dưới 10 dòng**.
+Mục tiêu: child app dùng được trong **dưới 10 dòng**. Có **hai** client, và sự khác nhau giữa chúng
+không phải danh sách tính năng mà là **vòng đời**.
+
+### 8.1 Trình duyệt — `createInfraClient`
 
 ```ts
 import { createInfraClient } from '@infra/sdk';
 
 const infra = createInfraClient({
   baseUrl: process.env.INFRA_URL!,
-  apiKey:  process.env.INFRA_API_KEY!,   // pk_live_… — CHỈ phía server
+  apiKey:  process.env.INFRA_PUBLISHABLE_KEY!,   // pk_live_… — an toàn trong bundle
 });
 
-const { data: session } = await infra.auth.getSession();
-const { data: notes }   = await infra.db.query<Note>(
-  'select id, title from notes where owner = $1 order by created_at desc limit 20',
-  [session!.user.id],
-);
+const { data: notes } = await infra
+  .from('notes')
+  .select('id', 'title', 'created_at')
+  .eq('done', false)
+  .order('created_at', 'desc')
+  .limit(20)
+  .execute();
 ```
 
+Câu trên **không nhắc tới `owner_id`**, nhưng người dùng chỉ nhận về note của chính họ: điều kiện
+hàng nằm ở policy trên hub và được server AND vào câu lệnh. Client chỉ có thể **thu hẹp**, không bao
+giờ nới rộng.
+
+Client này **từ chối khoá `sk_`** khi phát hiện đang chạy trong trình duyệt.
+
+### 8.2 Server / BFF — `createServerClient`
+
 ```ts
-export interface InfraClient {
-  auth: {
-    signIn: { email(i: { email: string; password: string }): Promise<Result<Session>>;
-              social(p: 'google' | 'github' | 'microsoft'): Promise<Result<{ url: string }>> };
-    signUp: { email(i: { email: string; password: string; name: string }): Promise<Result<Session>> };
-    signOut(): Promise<Result<null>>;
-    getSession(): Promise<Result<Session | null>>;
-  };
-  db: {
-    query<R>(sql: string, params?: unknown[]): Promise<Result<R[]>>;
-    queryOne<R>(sql: string, params?: unknown[]): Promise<Result<R | null>>;
-    health(): Promise<Result<HealthReport>>;
-  };
-}
-export type Result<T> =
-  | { data: T; error: null }
-  | { data: null; error: { code: InfraErrorCode; message: string; requestId: string } };
+import { createServerClient } from '@infra/sdk';
+
+const infra = createServerClient({
+  baseUrl: process.env.INFRA_URL!,
+  apiKey:  process.env.INFRA_SECRET_KEY!,   // sk_live_… — hợp lệ ở đây
+  storage: cookieJar,                        // BẮT BUỘC: token của request này
+});
 ```
+
+`storage` bắt buộc vì cùng một tiến trình phục vụ hàng nghìn người: **bất kỳ token nào sống lâu hơn
+một request đều là rò rỉ chéo người dùng**, và kiểu hỏng đó không sinh ra lỗi ở đâu cả — trang của B
+render dữ liệu của A. Client này gộp refresh **single-flight**; xem ADR-018.
+
+### 8.3 Public API surface
+
+| Gọi qua | HTTP | Khoá | Rules engine |
+|---|---|---|---|
+| `infra.from(...)` | `POST /api/v1/data/:resource` | `pk_` hoặc `sk_` | **có** — policy AND vào mọi câu lệnh |
+| `infra.db.query` | `POST /api/v1/query` | **chỉ `sk_`** | không — SQL thô, cho server tin cậy |
+| `infra.db.health` | `GET /api/v1/health` | bất kỳ | — |
+| `infra.auth.getSession` | `GET /api/v1/me` | `auth:read` | — |
+| — | `POST /api/v1/auth/token` · `refresh` · `revoke` | `pk_`/`sk_` | — |
+| — | `POST /api/v1/auth/recovery/request` · `confirm` | không cần | — |
+| — | `GET`/`POST /api/v1/webhooks` | `sk_` + `admin` | — |
+| — | `GET /api/jwks` | công khai | — |
+
+### 8.4 Ngữ pháp Query DSL
+
+Đóng hoàn toàn: **không `raw`, không mảnh `sql`, không `having` tự do**. Mọi chuỗi lọt vào văn bản
+SQL đều là từ khoá do compiler chọn hoặc một identifier đã qua `IDENTIFIER_PATTERN`; mọi giá trị của
+người gọi đều thành tham số bind.
+
+| | |
+|---|---|
+| Toán tử | `eq` `neq` `lt` `lte` `gt` `gte` `in` `not_in` `ilike` `is_null` `is_not_null` |
+| Hành động | `select` `insert` `update` `delete` |
+| Trần | `limit` ≤ 1000 (mặc định 100) · 25 filter · 200 giá trị `in` · 100 dòng insert |
+| Bắt buộc | `update`/`delete` **phải có ít nhất một filter** |
+| Cấm | `__proto__` · `constructor` · `prototype` làm tên cột |
+
+Không có `like` — Postgres phân biệt hoa thường còn SQLite thì không, nên giữ cả hai nghĩa là cùng
+một câu truy vấn trả kết quả khác nhau tuỳ app con nằm ở nhà cung cấp nào.
 
 SDK **không bao giờ throw** cho lỗi nghiệp vụ — luôn trả `{ data, error }` (kiểu Supabase).
 Chỉ throw khi cấu hình sai lúc khởi tạo. Không phụ thuộc runtime ngoài `fetch`.
-
-### 8.1 Public API surface
-
-| Method | HTTP | Scope cần |
-|---|---|---|
-| `db.query` | `POST /api/v1/query` | `db:read` (hoặc `db:write` nếu SQL ghi) |
-| `db.health` | `GET /api/v1/health` | bất kỳ |
-| `auth.getSession` | `GET /api/v1/me` | `auth:read` |
-| `auth.signIn.*` | `POST /api/auth/…` | không cần (dùng cookie) |
 
 ---
 
@@ -702,3 +752,11 @@ không chạy nửa vời.
 | ADR-015 | Hoãn SAML/SCIM | Theo quyết định của Khoi: chưa có khách hàng doanh nghiệp, tránh phình phạm vi. Kiến trúc vẫn để chỗ (OIDC provider trước, SAML là lớp bọc sau). | 2026-09-13 |
 | ADR-016 | Workspace 2 tầng mở, `workspace_id` NULLABLE | Giai đoạn cá nhân `workspace_id = null`; khi thương mại hoá chỉ cần bật, không phải migrate lại dữ liệu. | 2026-09-13 |
 | ADR-011 | Rate limit lưu trong bộ nhớ tiến trình | Nền tảng self-host chạy một instance; đủ dùng và không cần thêm Redis. Nếu scale ngang thì thay bằng store dùng chung. | 2026-09-10 |
+| ADR-017 | **Insert được chấm policy trên chính dòng dữ liệu, không phải qua WHERE** | `insert` không có mệnh đề WHERE để gắn điều kiện. Quan trọng hơn: nếu policy đòi `owner_id` mà dòng không đặt nó, câu trả lời **không phải "cho phép"** — cột sẽ nhận DEFAULT của bảng. `evaluateDecisionForRow` trả về `undecidable` và caller fail closed. | 2026-09-14 |
+| ADR-018 | **Refresh token gộp single-flight ở client là điều kiện đúng đắn, không phải tối ưu** | Refresh token xoay vòng + reuse detection thu hồi **cả family**. Năm request song song với token cũ → năm lượt refresh → bốn cái trình ra token vừa bị đốt → nền tảng đăng xuất người dùng khỏi mọi nơi, trong khi **mọi tầng đều hành xử đúng**. Chỉ client chặn được. | 2026-09-14 |
+| ADR-019 | **Decision log: từ chối ghi từng dòng, cho phép thì gộp** | Một dòng audit cho mỗi quyết định nghe thì đúng, nhưng dashboard poll vài giây/lần sinh hàng nghìn dòng "allowed" mỗi ngày — trên Master DB free tier 0.5 GB thì **nhật ký lớn hơn dữ liệu nó mô tả** trong một tuần, và job xoá log trở thành thứ chịu lực. | 2026-09-14 |
+| ADR-020 | **HIBP fail open, luật cục bộ fail closed** | Hai hướng ngược nhau có chủ đích. Luật cục bộ không tốn gì và không phụ thuộc gì → fail closed. Tra cứu HIBP phụ thuộc bên thứ ba → fail open, vì để nó chặn nghĩa là một sự cố bên ngoài khoá toàn bộ đăng ký và khôi phục tài khoản. `breachCheckPerformed: false` ghi lại rằng lần đó chưa kiểm. | 2026-09-14 |
+| ADR-021 | **Mỗi app con một Neon *project*, không phải branch** | Project mới là đơn vị Neon cô lập compute endpoint, RAM và hạn mức. Hai app dùng chung project sẽ dùng chung tất cả — đúng thứ nền tảng này sinh ra để tránh. Turso thì cấp token **theo từng database**, không phải token cấp org. | 2026-09-14 |
+| ADR-022 | **Ghi sổ tài nguyên trước, và giữ sổ lâu hơn dòng app** | `infra_provisioned_resources.app_id` dùng `on delete set null`. Một project Neon còn tồn tại mà không ai biết là một trong mười slot free tier mất **vĩnh viễn**; một orphan có ghi sổ chỉ tốn một lượt reclaim. | 2026-09-14 |
+| ADR-023 | **`createServerClient` bắt buộc có `storage`** | API được đẽo cho khó viết sai. Token nằm trong biến module trên server là rò rỉ chéo người dùng **không sinh ra lỗi ở đâu cả** — trang của B render dữ liệu của A. Bug đó tìm ra từ ticket hỗ trợ, không từ stack trace. | 2026-09-14 |
+| ADR-024 | **Không có đọc ẩn danh** | Không có access token và khoá không thuộc service account → từ chối. Đọc ẩn danh là thứ app phải bật có chủ đích, và cơ chế đó chưa tồn tại, nên câu trả lời an toàn là không. | 2026-09-14 |

@@ -1,0 +1,19 @@
+{
+  "name": "@infra/example-notes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "tsx setup.mts",
+    "demo": "tsx demo.mts"
+  },
+  "dependencies": {
+    "@infra/adapters": "workspace:*",
+    "@infra/core": "workspace:*",
+    "@infra/db": "workspace:*",
+    "@infra/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13"
+  }
+}
