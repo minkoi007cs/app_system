@@ -15,6 +15,7 @@ export * from './permissions.js';
 export * from './policy.js';
 export * from './query-dsl.js';
 export * from './query-compiler.js';
+export * from './decision-log.js';
 export * from './opaque-token.js';
 export * from './invitation.js';
 export * from './recovery.js';

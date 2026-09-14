@@ -48,10 +48,19 @@ export interface GatewayPlan {
   access: AccessResult;
   /** Statement shape for the audit log — carries no values by construction. */
   shape: string;
+  /**
+   * Milliseconds spent deciding: RBAC lookup, policy fetch, decision, compile.
+   *
+   * Measured here rather than at the route because only this function knows where the rules work
+   * ends and the database work begins. A number that quietly included the tenant's query time
+   * would make the rules engine look expensive and send someone optimising the wrong thing.
+   */
+  overheadMs: number;
 }
 
 export async function planQuery(db: MasterDatabase, request: GatewayRequest): Promise<GatewayPlan> {
   const { spec, appId, dialect } = request;
+  const startedAt = performance.now();
 
   const access = await checkAccess(db, {
     subjectType: request.subject.type,
@@ -87,6 +96,7 @@ export async function planQuery(db: MasterDatabase, request: GatewayRequest): Pr
       query: compileQuerySpec(spec, { dialect }),
       access,
       shape: queryShape(spec),
+      overheadMs: performance.now() - startedAt,
     };
   }
 
@@ -105,7 +115,7 @@ export async function planQuery(db: MasterDatabase, request: GatewayRequest): Pr
     },
   });
 
-  return { query, access, shape: queryShape(spec) };
+  return { query, access, shape: queryShape(spec), overheadMs: performance.now() - startedAt };
 }
 
 function assertRowsSatisfyPolicy(

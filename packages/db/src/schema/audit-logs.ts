@@ -36,6 +36,7 @@ export const AUDIT_ACTIONS = [
   'impersonation.ended',
   'access.granted',
   'access.denied',
+  'access.decision.summary',
   'role.assigned',
   'role.revoked',
   'policy.created',

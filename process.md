@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.5.1** |
-| Current phase | **Phase 7 đang chạy — T7.1→T7.4 xong, còn T7.5/T7.6** |
+| Current version | **v0.6.0** |
+| Current phase | **Phase 7 (Data API Gateway) hoàn tất — gate G7 đóng** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 31 test files, **429 tests** (core 329 · adapters 45 · sdk 24 · web 15 · db 16) |
-| Next task | **T7.5** — decision log + đo overhead của rules |
+| Last test | `PASS` — 33 test files, **465 tests** (core 365 · adapters 45 · sdk 24 · web 15 · db 16) |
+| Next task | **Phase 8** — SDK v2 (`createServerClient`, tự làm mới token) + Dashboard cấu hình rules |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -124,14 +124,14 @@ pnpm install && pnpm build && pnpm test
 - [x] **T6.5** Impersonation có lý do + hạn giờ + banner + audit (`infra_impersonation_sessions`) ✅
 - [x] **G6** Gate → bump **v0.5.0** ✅
 
-### Phase 7 — Data API Gateway & Security Rules  `IN PROGRESS`  ← giai đoạn 3
+### Phase 7 — Data API Gateway & Security Rules  `DONE`  ← giai đoạn 3
 - [x] **T7.1** Query DSL có kiểu (`from().select().eq().order().limit()`) ✅
 - [x] **T7.2** Biên dịch DSL → SQL tham số hoá cho Postgres và LibSQL ✅
 - [x] **T7.3** Áp policy: server chèn điều kiện, client chỉ thu hẹp được ✅
 - [x] **T7.4** `POST /api/v1/data/:resource` (pk_ + Bearer) tách khỏi `/api/v1/query` (sk_ only) ✅
-- [ ] **T7.5** Decision log + đo hiệu năng overhead của rules
-- [ ] **T7.6** Test: cố tình vượt rào rules, SQL injection qua DSL, nới rộng filter
-- [ ] **G7** Gate → bump **v0.6.0**
+- [x] **T7.5** Decision log + đo hiệu năng overhead của rules ✅
+- [x] **T7.6** Test: cố tình vượt rào rules, SQL injection qua DSL, nới rộng filter ✅
+- [x] **G7** Gate → bump **v0.6.0** ✅
 
 ### Phase 8 — SDK v2 & Dashboard hoàn chỉnh  `NOT STARTED`  ← giai đoạn 4
 - [ ] **T8.1** `createServerClient()` cho BFF (token nằm ở server app con)
@@ -185,6 +185,66 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-14 · v0.6.0 · feat(gateway): decision log with bounded aggregation, and the adversarial suite that found a hole
+
+**Deliverables**
+- `decision-log.ts` — cách hiển nhiên (mỗi quyết định một dòng audit) là cách **sai** ở đây. Một
+  dashboard poll vài giây một lần sinh ra hàng nghìn dòng "allowed" giống hệt nhau mỗi ngày, và
+  trên Master DB free tier 0.5 GB thì **nhật ký của chuyện đã xảy ra sẽ lớn hơn chính dữ liệu nó
+  mô tả** trong vòng một tuần. Lúc đó job xoá log cũ trở thành thứ chịu lực, và lần đầu nó hỏng là
+  nền tảng ngừng nhận ghi.
+  Nên hai nửa được đối xử khác nhau, vì chúng **được dùng khác nhau**:
+  · **Từ chối ghi từng dòng một** — hiếm, và mỗi lần là một câu hỏi sẽ có người đi tìm lời đáp:
+    vì sao user này không thấy dòng kia? Một lần từ chối không có bản ghi là một ticket không có
+    câu trả lời.
+  · **Cho phép thì gộp lại trong bộ nhớ** thành đếm + histogram độ trễ theo (resource, action),
+    xả một dòng mỗi cửa sổ. Trả lời được "rules có chậm không" và "bảng nào nóng" mà không giữ
+    một dòng cho mỗi lượt đọc.
+- Histogram dùng **bucket log**, percentile trả về **cận trên của bucket** — tức là ước lượng
+  **cao hơn** thực tế. Con số này đem so với ngân sách độ trễ, nên sai lệch phải nghiêng về phía an
+  toàn.
+- `DecisionMetrics` **có trần cứng** 200 khoá: một caller lặp qua các tên resource bịa ra không thể
+  làm map phình mãi. Số khoá bị bỏ được đếm, để khoảng trống là thứ **nhìn thấy được** chứ không im lặng.
+- Flush kích hoạt bằng **lưu lượng, không bằng timer**: worker serverless có thể bị đóng băng giữa
+  các request, nên `setInterval` hoặc không bao giờ chạy, hoặc chạy trên một tiến trình không ai dùng.
+- `GatewayPlan.overheadMs` đo **riêng thời gian của rules engine**, không lẫn thời gian của database
+  tenant — một con số gộp cả hai sẽ khiến rules engine trông đắt đỏ và đẩy người ta đi tối ưu nhầm chỗ.
+- **T7.6 — bộ test tấn công có chủ đích.** Viết từ phía kẻ tấn công: mỗi test là một nỗ lực đưa giá
+  trị vào phần *văn bản* SQL, nới rộng điều kiện policy, hoặc chạm tới bảng mình không có quyền.
+  Chúng khẳng định thứ kẻ tấn công **không** lấy được — nên nhiều test kiểm tra sự *vắng mặt* của
+  một chuỗi, chứ không phải sự có mặt: một lớp phòng thủ sinh ra SQL trông hợp lý mà vẫn rò rỉ chính
+  là kiểu hỏng mà test "có trả về dòng nào không" sẽ bỏ sót. Có cả một lượt fuzz 300 chuỗi ngẫu nhiên
+  từ bảng chữ cái toàn ký tự nguy hiểm.
+
+**🔴 Lỗi thật do bộ test tấn công tìm ra**
+`__proto__`, `constructor`, `prototype` **lọt qua** phép kiểm định danh — chúng chỉ gồm chữ và gạch
+dưới nên khớp `IDENTIFIER_PATTERN`. Hậu quả: `row['__proto__'] = 'x'` trên một object thường **âm
+thầm không đặt gì cả** — khoá biến mất, danh sách cột rỗng, và compiler sinh ra
+`insert into "notes" () values ()`. Đã sửa bằng cách từ chối thẳng ba tên đó; rõ ràng hơn là đổi
+row sang object không prototype, vì cách này đồng thời chặn chúng ở cả `select`, `order`, `returning`.
+
+**Modified files**
+- `packages/core/src/decision-log.ts` (new) · `src/{query-dsl,index}.ts` (edit)
+- `packages/auth/src/gateway.ts` (edit — `overheadMs`)
+- `apps/web/src/lib/decision-log.ts` (new) · `app/api/v1/data/[resource]/route.ts` (edit)
+- `packages/db/src/schema/audit-logs.ts` (edit — `access.decision.summary`)
+- `packages/sdk/src/query-builder.ts` (edit — `select([...])`, `order()`, `execute()`)
+- `packages/core/tests/{decision-log,adversarial-gateway}.test.ts` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (465 passed / 465 — core 365 · adapters 45 · sdk 24 · web 15 · db 16)
+- Không có migration mới.
+
+**Notes / decisions**
+- `'notes '` (thừa khoảng trắng) **được chấp nhận sau khi trim**, không bị từ chối — đây là lỗi gõ
+  chứ không phải tấn công, và tên sau khi trim vẫn phải qua phép kiểm định danh. Đã viết hẳn một
+  test nói rõ điều đó thay vì để nó là giả định ngầm.
+- Từ chối được ghi **trước khi** lỗi lan ra ngoài, nên một request bị chặn không bao giờ vô hình.
+
+**Next task** → **Phase 8**: `createServerClient()` cho Server Component/BFF, hàng đợi tự làm mới
+token, và giao diện Dashboard để cấu hình rules trực quan.
 
 ### 2026-09-14 · v0.5.1 · feat(gateway): typed query dsl, dual-dialect compiler and the rules-enforced data endpoint
 

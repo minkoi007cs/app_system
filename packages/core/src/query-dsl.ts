@@ -104,12 +104,27 @@ function rejectUnknownKeys(source: Record<string, unknown>, allowed: readonly st
   if (unknown.length > 0) fail(`unknown ${what} field(s): ${unknown.join(', ')}`, { unknown });
 }
 
+/**
+ * Names that pass the identifier pattern but must never be accepted as columns.
+ *
+ * Found by the adversarial suite. `__proto__` is a legal-looking identifier — letters and
+ * underscores — so the pattern admits it, and `row['__proto__'] = 'x'` on a plain object silently
+ * sets nothing at all: the key vanishes, the column list comes back empty, and the compiler emits
+ * `insert into "notes" () values ()`. Rejecting the three reserved names is clearer than switching
+ * the row to a null-prototype object, because it also keeps them out of select, order and
+ * returning, where they would be equally surprising.
+ */
+const RESERVED_IDENTIFIERS: readonly string[] = ['__proto__', 'constructor', 'prototype'];
+
 export function assertIdentifier(value: unknown, what: string): string {
   if (typeof value !== 'string') fail(`${what} must be a string`);
   const normalised = value.trim().toLowerCase();
   if (!IDENTIFIER_PATTERN.test(normalised)) {
     // The offending value is echoed because it is the caller's own input, never a secret.
     fail(`${what} is not a valid identifier: "${value}"`, { value });
+  }
+  if (RESERVED_IDENTIFIERS.includes(normalised)) {
+    fail(`${what} may not be "${normalised}"`, { value: normalised });
   }
   return normalised;
 }

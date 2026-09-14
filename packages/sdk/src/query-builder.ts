@@ -39,7 +39,7 @@ export interface QueryResponse<R> {
 
 export class QueryBuilder<R = Record<string, unknown>> {
   private readonly filters: QueryFilter[] = [];
-  private readonly order: Array<{ column: string; direction: 'asc' | 'desc' }> = [];
+  private readonly orderTerms: Array<{ column: string; direction: 'asc' | 'desc' }> = [];
   private columns: string[] = [];
   private returningColumns: string[] = [];
   private action: QueryPayload['action'] = 'select';
@@ -52,8 +52,9 @@ export class QueryBuilder<R = Record<string, unknown>> {
     private readonly resource: string,
   ) {}
 
-  select(...columns: string[]): this {
-    this.columns = columns;
+  /** Accepts `select('id', 'title')` or `select(['id', 'title'])` — both spellings are common. */
+  select(...columns: Array<string | string[]>): this {
+    this.columns = columns.flat();
     return this;
   }
 
@@ -114,8 +115,13 @@ export class QueryBuilder<R = Record<string, unknown>> {
   }
 
   orderBy(column: string, direction: 'asc' | 'desc' = 'asc'): this {
-    this.order.push({ column, direction });
+    this.orderTerms.push({ column, direction });
     return this;
+  }
+
+  /** Alias of orderBy, for people arriving from a Supabase-shaped client. */
+  order(column: string, direction: 'asc' | 'desc' = 'asc'): this {
+    return this.orderBy(column, direction);
   }
 
   limit(count: number): this {
@@ -155,7 +161,7 @@ export class QueryBuilder<R = Record<string, unknown>> {
     const payload: QueryPayload = { action: this.action };
     if (this.columns.length > 0) payload.select = this.columns;
     if (this.filters.length > 0) payload.filters = this.filters;
-    if (this.order.length > 0) payload.order = this.order;
+    if (this.orderTerms.length > 0) payload.order = this.orderTerms;
     if (this.limitValue !== undefined) payload.limit = this.limitValue;
     if (this.offsetValue !== undefined) payload.offset = this.offsetValue;
     if (this.rows !== undefined) payload.values = this.rows;
@@ -170,6 +176,11 @@ export class QueryBuilder<R = Record<string, unknown>> {
       body: this.toJSON(),
       useApiKey: true,
     });
+  }
+
+  /** Alias of run(). */
+  async execute(): Promise<Result<QueryResponse<R>>> {
+    return this.run();
   }
 
   /** Convenience for the common case — just the rows. */

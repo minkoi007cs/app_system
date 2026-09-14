@@ -23,6 +23,7 @@ import { bearerFromHeader, planQuery, verifyToken, type GatewaySubject } from '@
 import { InfraError, parseQuerySpec } from '@infra/core';
 import { getMembership, recordAuditAsync } from '@infra/db';
 import { db } from '@/lib/db';
+import { recordDecision } from '@/lib/decision-log';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { clientIp, requireApiKey, userAgent } from '@/lib/guard';
 import { tokenIssuer } from '@/lib/issuer';
@@ -81,14 +82,47 @@ export async function POST(
     const subject = await resolveSubject(request, caller);
 
     const adapter = await resolver().resolve(caller.appId);
-    const plan = await planQuery(db(), {
-      appId: caller.appId,
-      subject,
-      spec,
-      dialect: adapter.dialect,
-    });
+
+    let plan;
+    try {
+      plan = await planQuery(db(), {
+        appId: caller.appId,
+        subject,
+        spec,
+        dialect: adapter.dialect,
+      });
+    } catch (error) {
+      // A denial is a decision, and the one people actually come looking for. Recorded before the
+      // error propagates, so a refused request is never invisible.
+      recordDecision({
+        appId: caller.appId,
+        actorType: subject.type === 'user' ? 'admin' : 'api_key',
+        actorId: subject.id,
+        resource: spec.resource,
+        action: spec.action,
+        allowed: false,
+        overheadMs: Date.now() - started,
+        totalMs: Date.now() - started,
+        deniedBy: InfraError.is(error) ? ((error.details['deniedBy'] as 'rbac' | 'abac') ?? null) : null,
+        reason: InfraError.is(error) ? error.message : 'denied',
+        ipAddress: clientIp(request),
+      });
+      throw error;
+    }
 
     const result = await adapter.query({ sql: plan.query.sql, params: plan.query.params });
+
+    recordDecision({
+      appId: caller.appId,
+      actorType: subject.type === 'user' ? 'admin' : 'api_key',
+      actorId: subject.id,
+      resource: spec.resource,
+      action: spec.action,
+      allowed: true,
+      // The rules engine's own time, not the tenant database's — see GatewayPlan.overheadMs.
+      overheadMs: plan.overheadMs,
+      totalMs: Date.now() - started,
+    });
 
     recordAuditAsync(db(), {
       appId: caller.appId,
@@ -105,6 +139,7 @@ export async function POST(
         action: spec.action,
         rowCount: result.rowCount,
         durationMs: result.durationMs,
+        overheadMs: Math.round(plan.overheadMs * 100) / 100,
         gatewayMs: Date.now() - started,
         policies: plan.access.decision?.matched ?? [],
       },
