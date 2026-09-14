@@ -2,11 +2,11 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.7.1** |
+| Current version | **v0.7.3** |
 | Current phase | **Phase 8 hoàn tất — gate G8 đóng. Cả 8 phase đã xong.** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 36 test files, **503 tests** (core 365 · sdk 51 · adapters 45 · web 26 · db 16) |
+| Last test | `PASS` — 38 test files, **518 tests** (core 378 · sdk 51 · adapters 45 · web 28 · db 16) |
 | Next task | **G0 · chặn v1.0**: `pnpm db:migrate` (0007→0010) — xem §4 v1.0 Readiness |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
@@ -172,19 +172,19 @@ pnpm install && pnpm build && pnpm test
 | # | Khoảng cách | Vì sao chặn | Ai làm được |
 |---|---|---|---|
 | **G0-1** | **4 migration chưa apply lên Neon** (0007→0010) | Master DB thật đang thiếu 8 bảng. Mọi thứ của Phase 5.18 trở đi sẽ lỗi runtime ngay lần gọi đầu. | Khoi (`pnpm db:migrate`) |
-| **G0-2** | **Chưa có mail transport** (R8) | Link khôi phục tài khoản hiện chỉ in ra console ở dev. Ở production nghĩa là **không ai quên mật khẩu mà lấy lại được**. | Cần chọn nhà cung cấp (Resend/SES/SMTP) rồi nối vào `deliverRecoveryLink` |
-| **G0-3** | **Rate limit nằm trong bộ nhớ tiến trình** (R11, ADR-011) | Đúng với self-host một instance. Deploy lên Vercel/serverless là **mỗi instance một bộ đếm riêng** → throttle chống dò mật khẩu bị chia cho số instance. `infra_login_attempts` đã nằm trong DB nên không ảnh hưởng; nhưng `lib/rate-limit.ts` cho `/api/v1/*` thì có. | Thay bằng store dùng chung, hoặc khoá deploy ở một instance |
+| **G0-2** | **Mail transport: đã có, chưa cấu hình** | `@infra/core/mailer` có 3 transport (`console` · `resend` · `webhook`). Còn lại đúng một việc: **đặt `INFRA_MAIL_PROVIDER` + khoá**. Chưa đặt thì `unconfigured` **ném lỗi và log to**, không âm thầm nuốt. | Khoi (chọn nhà cung cấp, đặt env) |
+| ~~**G0-3**~~ | ~~Rate limit trong bộ nhớ tiến trình~~ ✅ | `infra_rate_limits` là bộ đếm dùng chung, một upsert mỗi lượt kiểm. Lớp trong bộ nhớ giữ lại nhưng **chỉ được phép từ chối, không được phép cho qua** — xem ADR-025. | xong |
 | **G0-4** | **Chưa chạy thật lần nào end-to-end** | 503 test chứng minh các mảnh đúng và đường nối khớp. Chưa có gì chứng minh một app con thật đọc được dữ liệu thật qua policy thật. | Khoi + `examples/notes-app` setup |
 
 ### Nên làm trước khi có người dùng thật
 
 | # | Khoảng cách | Ghi chú |
 |---|---|---|
-| G1-1 | Không có backup/restore cho Master DB | Mất Master DB = mất mọi cấu hình app con. Neon có PITR ở free tier — cần bật và **thử restore một lần**, vì backup chưa thử khôi phục thì chưa phải backup. |
-| G1-2 | `INFRA_MASTER_ENCRYPTION_KEY` chưa có quy trình xoay | Cột `encryption_key_version` đã có sẵn, `scripts/rotate-encryption-key.py` đã có, nhưng chưa có runbook và chưa diễn tập. |
-| G1-3 | Webhook drain chưa có lịch chạy | `/api/internal/webhooks/drain` cần cron gọi. Không gọi thì sự kiện xếp hàng mãi trong `infra_webhook_deliveries`. |
-| G1-4 | Job dọn chưa có lịch | `sweepLoginAttempts`, `expireImpersonations`, `purgeSettledDeliveries` đều viết xong nhưng chưa ai gọi định kỳ. |
-| G1-5 | Chưa có CI | Mọi lần build/test tới giờ chạy thủ công trong sandbox. Một GitHub Action chạy `pnpm build && pnpm test` là rẻ và chặn được hồi quy. |
+| G1-1 | Backup/restore Master DB: đã có runbook, **chưa bật và chưa thử** | `docs/runbooks.md` §3. Backup chưa thử khôi phục thì chưa phải backup — nó chỉ là một niềm tin. |
+| G1-2 | `INFRA_MASTER_ENCRYPTION_KEY`: đã có runbook, **chưa diễn tập** | `docs/runbooks.md` §2 có cả quy trình lẫn bài diễn tập trên Neon branch. Còn thiếu đúng một thứ: chạy bài diễn tập đó. Một quy trình chưa ai chạy bao giờ không phải quy trình, nó là một ý tưởng. |
+| ~~G1-3~~ | ~~Webhook drain chưa có lịch chạy~~ ✅ | Lịch cron cho cả hai endpoint đã viết trong `docs/runbooks.md` §1 (cron máy tự host + `vercel.json`). Khoi vẫn phải **đặt `INFRA_INTERNAL_TOKEN` và cài lịch** — chưa đặt thì endpoint từ chối tất cả. |
+| ~~G1-4~~ | ~~Job dọn chưa có lịch~~ ✅ | Gom vào `POST /api/internal/maintenance`, chạy mỗi giờ. |
+| ~~G1-5~~ | ~~Chưa có CI~~ ✅ | `.github/workflows/ci.yml`: install → build → test → typecheck → **kiểm migration drift**. Không cần secret nào. |
 | G1-6 | Turso chưa cấu hình lần nào | Smoke test đa nhà cung cấp mới chạy 2/3. Nhánh LibSQL của compiler có test nhưng chưa chạm database LibSQL thật. |
 
 ### Rủi ro đã biết và chấp nhận
@@ -223,6 +223,114 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-14 · v0.7.3 · feat(ops): shared rate-limit counter and a real mail transport
+
+**Deliverables — G0-3 đóng**
+- `infra_rate_limits` — bộ đếm **dùng chung**, thay cho bộ đếm trong bộ nhớ tiến trình. Lỗi cũ tệ ở
+  chỗ nó **trông như đang chạy đúng**: trên serverless, cùng đoạn mã đó âm thầm nhân mọi hạn mức lên
+  theo số instance. Không có lỗi nào, chỉ là trần cao hơn con số ghi trong config.
+- Cả phép kiểm nằm trong **một upsert**: chèn cửa sổ mới, hoặc — nếu đã có dòng — hoặc khởi động lại
+  (cửa sổ cũ đã qua) hoặc tăng lên. Làm bằng SELECT rồi UPDATE thì vừa **hai** round trip vừa là một
+  cuộc đua trong đó hai request cùng đọc 99 rồi cùng ghi 100.
+- Lớp trong bộ nhớ **giữ lại nhưng bị giáng cấp xuống thứ nó không thể làm sai**: nó **chỉ được phép
+  từ chối, không được phép cho qua**. Nếu riêng instance này đã thấy quá hạn mức trong cửa sổ hiện
+  tại thì người gọi cũng đã quá hạn mức toàn cục — đó là số học, không phải phỏng đoán — nên từ chối
+  được mà không cần round trip. Thứ gì lớp cục bộ định cho qua thì vẫn phải hỏi bộ đếm chung.
+  Thứ tự đó quan trọng vì lưu lượng làm rate limit tốn kém chính là lưu lượng lạm dụng, mà lưu lượng
+  lạm dụng đúng là thứ lớp cục bộ đuổi đi được miễn phí.
+- Test viết lại quanh **bất biến phủ định**: `localRefusal` **không bao giờ** trả về verdict
+  `allowed: true`. Một lớp cục bộ có thể cho qua là một lớp cục bộ có thể nâng trần toàn cục.
+- Cửa sổ dùng **fixed window chứ không sliding**, có chủ đích: sliding cần một dòng mỗi request hoặc
+  một cấu trúc Postgres không cho rẻ, còn điểm yếu đã biết của fixed window (tối đa 2× hạn mức qua
+  ranh giới) chấp nhận được cho một **trần chống lạm dụng**. Nó **không** chấp nhận được cho throttle
+  đăng nhập — và đó chính là lý do throttle đó có bảng riêng với đường cong riêng.
+
+**Deliverables — G0-2 gần đóng**
+- `@infra/core/mailer` — 3 transport: `console` · `resend` (một lượt HTTPS, không SDK nên không có
+  dependency phải theo) · `webhook` (POST tới URL của chính deployment, cho SMTP relay và mọi thứ khác).
+- **`none` không phải là một transport.** Deployment chưa cấu hình nhận `unconfigured`: **ném lỗi và
+  log to**, không bao giờ thành công trong im lặng. Một luồng khôi phục báo thành công mà không gửi
+  gì tệ hơn một luồng hỏng nhìn thấy được.
+- Lý do đây là interface chứ không phải một lệnh gọi Resend nội tuyến: luồng khôi phục là **chỗ duy
+  nhất mà một lần gửi hỏng không phân biệt được với một cuộc tấn công** đối với người ở đầu kia. Họ
+  xin đặt lại mật khẩu và không có gì tới; họ không biết là mail chậm, địa chỉ sai, hay tài khoản đã
+  bị ai đó chiếm.
+- Địa chỉ trong log **luôn được che** (`al***@example.com`): đủ để lần một dòng log, không đủ để thu
+  hoạch địa chỉ.
+- `deliverRecoveryLink` giờ **await** và trả về kết quả. Endpoint vẫn trả 202 như nhau dù email có
+  tồn tại hay không — nhưng nền tảng cần biết **trong log của chính nó** là mail có đi hay không, vì
+  "người dùng nói không nhận được gì" nếu không thì không trả lời nổi.
+
+**Modified files**
+- `packages/db/src/schema/rate-limits.ts` · `queries/rate-limits.ts` (new) · `schema/index.ts` · `queries/index.ts` (edit)
+- `packages/core/src/mailer.ts` (new) · `src/index.ts` (edit)
+- `apps/web/src/lib/rate-limit.ts` (rewrite) · `lib/recovery-delivery.ts` (rewrite) · `lib/guard.ts` (edit)
+- `apps/web/src/app/api/v1/auth/recovery/request/route.ts` · `api/internal/maintenance/route.ts` (edit)
+- `packages/core/tests/mailer.test.ts` (new) · `apps/web/tests/api.test.ts` (rewrite phần rate limit)
+- `packages/db/migrations/0011_brown_dragon_man.sql` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (518 passed / 518 — core 378 · sdk 51 · adapters 45 · web 28 · db 16)
+- **Migration mới: `0011`** → Neon giờ cần 0007→0011.
+
+**Notes / decisions**
+- Bộ đếm chung **fail open**: một trần chống lạm dụng là lan can, không phải phép kiểm quyền. Database
+  là nguồn sự thật nhưng **không được phép là điểm chết duy nhất của cả API**. Mọi phép kiểm quyết
+  định ai được thấy gì đều fail closed, ở chỗ khác.
+- Bảng rate limit khoá theo **digest**, giống `infra_login_attempts` — bảng không chứa key id hay IP
+  dạng đọc được.
+- G0-2 **không đánh dấu xong**: mã đã có, nhưng chưa ai đặt `INFRA_MAIL_PROVIDER`. Có transport mà
+  chưa cấu hình thì người quên mật khẩu vẫn không lấy lại được tài khoản.
+
+**Next task** → `G0-1` `pnpm db:migrate` (giờ là 0007→**0011**), `G0-2` đặt biến mail, rồi `G0-4`.
+
+### 2026-09-14 · v0.7.2 · chore(ops): ci, the scheduled jobs nobody was calling, and the runbooks
+
+**Deliverables**
+- `.github/workflows/ci.yml` — install → build → test → typecheck, và thêm một bước ít ai nghĩ tới:
+  **kiểm migration drift**. Chạy `db:generate` rồi fail nếu `packages/db/migrations` bẩn. Sửa schema
+  mà quên sinh migration là lỗi chỉ lộ ra lúc deploy, và lúc đó thì đã muộn.
+  `env` để trống **có chủ đích**: mọi test trong repo chạy được mà không cần database, không cần
+  network, không cần secret. Ngày nào một test cần credential ở đây, đó là dấu hiệu test đó **đã
+  thôi là unit test**, chứ không phải dấu hiệu CI cần secret.
+- `POST /api/internal/maintenance` — gom ba job dọn. **Mỗi job đã được viết cùng lúc với tính năng
+  nó dọn, và mỗi job không làm gì cả cho tới khi có ai đó gọi.** Khoảng trống đó là kiểu hỏng
+  production im lặng: hệ thống chạy hoàn hảo một tháng, rồi một phiên mạo danh hết hạn từ ba tuần
+  trước vẫn đọc ra là đang hoạt động vì không có gì đóng nó lại.
+- Mỗi job chạy độc lập, một cái hỏng không chặn các cái còn lại — một lượt dọn không chạy được thì
+  đáng báo cáo, không đáng bỏ luôn cả lượt.
+- `lib/internal-auth.ts` — gom phép kiểm token nội bộ (drain đang tự viết lại). **Chưa đặt
+  `INFRA_INTERNAL_TOKEN` thì không ai qua được**: cửa đóng chứ không phải cửa mở. Deploy quên biến
+  này sẽ thấy 401 trong log scheduler — thứ có người để ý; lựa chọn còn lại là một endpoint công
+  khai trong im lặng, thứ không ai để ý.
+- `docs/runbooks.md` — 6 runbook, mỗi cái có **điều kiện dừng**: chỗ mà thấy dấu hiệu đó thì dừng
+  chứ không đi tiếp. Xoay khoá mã hoá · backup/restore · tài khoản bị chiếm · app đọc không ra dữ
+  liệu · lịch chạy · trước khi deploy nhiều instance.
+
+**Modified files**
+- `.github/workflows/ci.yml` · `docs/runbooks.md` (new)
+- `apps/web/src/lib/internal-auth.ts` · `app/api/internal/maintenance/route.ts` (new)
+- `apps/web/src/app/api/internal/webhooks/drain/route.ts` (edit — dùng chung phép kiểm token)
+- `process.md` (edit — G1-3/G1-4/G1-5 đóng, G1-1/G1-2 hạ xuống "đã có runbook, chưa diễn tập")
+
+**Test status**
+- `pnpm build` → PASS (6/6 package, thêm route `/api/internal/maintenance`)
+- `pnpm test`  → PASS (503 passed / 503)
+- Không có migration mới.
+
+**Notes / decisions**
+- Runbook xoay khoá đặt **bài diễn tập lên trước quy trình thật**, và nói thẳng: chưa diễn tập thì
+  chưa được xoay trên Master DB thật. Đây là thao tác nguy hiểm nhất trong hệ thống — mất khoá là
+  mất mọi connection string, không có đường về.
+- Runbook "tài khoản bị chiếm" có một điều kiện dừng đáng chú ý: thấy `auth.token.reuse_detected`
+  **đừng vội kết luận là tấn công** — một app con dùng SDK cũ không gộp refresh single-flight sinh
+  ra **đúng dấu hiệu đó** (ADR-018).
+- G1-1 và G1-2 **không đánh dấu xong**, chỉ hạ mức: runbook đã viết nhưng chưa ai chạy. Viết ra rồi
+  tick xong là cách tự lừa mình.
+
+**Next task** → `G0-1` `pnpm db:migrate`, rồi `G0-4` chạy thật app mẫu.
 
 ### 2026-09-14 · v0.7.1 · docs(repo): bring tech.md and the readme back in line with the system
 
@@ -928,5 +1036,5 @@ phương ngữ, policy áp phía server, tách `/api/v1/data/:resource` (pk_) kh
 | R7 | Thư mục kết nối bị gắn lại → mất file chưa commit | Cao (đã xảy ra 1 lần) | Commit git sớm và thường xuyên; giữ bản sao tài liệu trong phiên trước khi ghi xuống máy |
 | R8 | Chưa có mailer → link khôi phục không gửi được ở production | Cao (chặn luồng khôi phục thật) | `deliverRecoveryLink` in ra console ở dev và **log lỗi rõ ràng** ở production thay vì nuốt im lặng; nối transport thật ở Phase 8 |
 | R9 | HIBP nằm ngoài allowlist egress → không kiểm được mật khẩu lộ | Trung bình | Fail open có chủ đích; `breachCheckPerformed: false` vào audit để biết lần nào chưa kiểm |
-| R11 | `lib/rate-limit.ts` đếm trong bộ nhớ tiến trình → lên serverless mỗi instance một bộ đếm | Trung bình | `infra_login_attempts` nằm trong DB nên chống dò mật khẩu không dính; rate limit `/api/v1/*` thì cần store dùng chung nếu scale ngang (ADR-011) |
+| ~~R11~~ | ~~Rate limit trong bộ nhớ → serverless mỗi instance một bộ đếm~~ | — | **Đã đóng ở v0.7.3**: `infra_rate_limits` là bộ đếm dùng chung; lớp cục bộ chỉ được từ chối (ADR-025) |
 | R10 | DNS rebinding: host webhook công khai nhưng resolve về địa chỉ nội bộ | Cao | `isPublicHttpUrl` chặn theo URL + **từ chối redirect**; cần chắc hơn thì egress qua proxy ghim IP đã resolve |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sqlIntent } from '../src/lib/sql-intent';
-import { consume, DEFAULT_LIMIT, sweep } from '../src/lib/rate-limit';
+import { DEFAULT_LIMIT, localRefusal, sweep } from '../src/lib/rate-limit';
 
 describe('sqlIntent', () => {
   it('treats plain selects as reads', () => {
@@ -32,31 +32,55 @@ describe('sqlIntent', () => {
   });
 });
 
-describe('rate limit', () => {
-  it('allows up to the limit inside one window', () => {
+describe('rate limit — the local layer', () => {
+  // The shared counter in the Master DB is the authority; this layer exists only to turn away
+  // abusive traffic without a round trip. So the property under test is negative.
+
+  it('never returns an allowed verdict — it can only refuse or defer', () => {
     const key = `key-${Math.random()}`;
     const now = 1_000_000;
-    for (let i = 0; i < DEFAULT_LIMIT; i += 1) {
-      expect(consume(key, DEFAULT_LIMIT, now).allowed).toBe(true);
+
+    for (let i = 0; i < DEFAULT_LIMIT + 50; i += 1) {
+      const verdict = localRefusal(key, DEFAULT_LIMIT, now);
+      // Either "ask the shared store" (null) or a refusal. Never a local yes.
+      if (verdict !== null) expect(verdict.allowed).toBe(false);
     }
-    expect(consume(key, DEFAULT_LIMIT, now).allowed).toBe(false);
   });
 
-  it('resets after the window elapses', () => {
+  it('defers while under the limit, then refuses', () => {
     const key = `key-${Math.random()}`;
-    expect(consume(key, 1, 0).allowed).toBe(true);
-    expect(consume(key, 1, 10).allowed).toBe(false);
-    expect(consume(key, 1, 60_001).allowed).toBe(true);
+    const now = 1_000_000;
+
+    for (let i = 0; i < DEFAULT_LIMIT; i += 1) {
+      expect(localRefusal(key, DEFAULT_LIMIT, now)).toBeNull();
+    }
+    expect(localRefusal(key, DEFAULT_LIMIT, now)?.allowed).toBe(false);
   });
 
-  it('keeps separate budgets per key', () => {
-    expect(consume('key-a', 1, 0).allowed).toBe(true);
-    expect(consume('key-b', 1, 0).allowed).toBe(true);
+  it('starts a new window once the old one has passed', () => {
+    const key = `key-${Math.random()}`;
+    expect(localRefusal(key, 1, 0)).toBeNull();
+    expect(localRefusal(key, 1, 10)?.allowed).toBe(false);
+    expect(localRefusal(key, 1, 60_001)).toBeNull();
   });
 
-  it('sweeps expired windows', () => {
-    consume('key-sweep', 1, 0);
+  it('keeps separate budgets per identity', () => {
+    expect(localRefusal(`a-${Math.random()}`, 1, 0)).toBeNull();
+    expect(localRefusal(`b-${Math.random()}`, 1, 0)).toBeNull();
+  });
+
+  it('sweeps closed windows', () => {
+    const key = `key-${Math.random()}`;
+    localRefusal(key, 1, 0);
     sweep(120_000);
-    expect(consume('key-sweep', 1, 120_001).allowed).toBe(true);
+    expect(localRefusal(key, 1, 120_001)).toBeNull();
+  });
+
+  it('reports how long the refusal lasts', () => {
+    const key = `key-${Math.random()}`;
+    localRefusal(key, 1, 0);
+    const verdict = localRefusal(key, 1, 1_000);
+    expect(verdict?.resetInMs).toBe(59_000);
+    expect(verdict?.remaining).toBe(0);
   });
 });

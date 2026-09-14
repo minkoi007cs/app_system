@@ -42,9 +42,15 @@ export async function POST(request: Request): Promise<Response> {
     if (email !== '') {
       const result = await requestPasswordRecovery(auth(), db(), { email, ip });
 
+      let outcome = { delivered: false, transport: 'none' };
       if (result.issued && result.token !== null) {
         const env = parseServerEnv();
-        deliverRecoveryLink({ email, url: recoveryUrl(env.INFRA_PUBLIC_URL, result.token) });
+        // Awaited, so the platform's own log knows whether the mail went. The HTTP answer is the
+        // same either way — see the header comment.
+        outcome = await deliverRecoveryLink({
+          email,
+          url: recoveryUrl(env.INFRA_PUBLIC_URL, result.token),
+        });
       }
 
       recordAuditAsync(db(), {
@@ -56,7 +62,7 @@ export async function POST(request: Request): Promise<Response> {
         outcome: 'success',
         ipAddress: ip,
         userAgent: userAgent(request),
-        meta: { delivered: result.issued },
+        meta: { delivered: outcome.delivered, transport: outcome.transport },
       });
 
       if (!result.issued) await recordLoginFailure(db(), { ip, email: null });

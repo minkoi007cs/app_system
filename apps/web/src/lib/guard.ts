@@ -83,7 +83,7 @@ export async function requireApiKey(
     });
   }
 
-  const verdict = consume(key.id);
+  const verdict = await consume(key.id);
   if (!verdict.allowed) {
     throw new InfraError('RATE_LIMITED', 'too many requests for this API key', {
       details: { retryInMs: verdict.resetInMs },

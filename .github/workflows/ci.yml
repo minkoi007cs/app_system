@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first: the older run's answer is already stale.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Deliberately empty. Every test in this repo runs without a database, a network call or a
+    # secret — the adversarial suite, the crypto vectors and the SDK transport tests all use
+    # injected fetch implementations. If a test ever needs a credential here, that is a sign the
+    # test has stopped being a unit test rather than a sign CI needs secrets.
+    env:
+      CI: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      # Typecheck after build so it sees the emitted declaration files, the same order a local
+      # `pnpm build && pnpm typecheck` uses.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Check for uncommitted migration drift
+        run: |
+          INFRA_MASTER_DATABASE_URL="postgresql://ci:ci@localhost:5432/ci" pnpm db:generate
+          if [ -n "$(git status --porcelain packages/db/migrations)" ]; then
+            echo "::error::schema changed but the migration was not committed — run pnpm db:generate"
+            git --no-pager diff --stat packages/db/migrations
+            exit 1
+          fi
