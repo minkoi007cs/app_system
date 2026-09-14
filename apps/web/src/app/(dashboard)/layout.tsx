@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Activity, Boxes, ScrollText, ShieldCheck } from 'lucide-react';
 import { requireSuperAdmin } from '@/lib/admin';
 import { SignOutButton } from '@/components/sign-out-button';
+import { ImpersonationBanner } from '@/components/impersonation-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </nav>
         <SignOutButton />
       </aside>
-      <main className="flex-1 p-6">{children}</main>
+      <div className="flex flex-1 flex-col">
+        {/* Renders on every dashboard page, not just the one that started it. */}
+        <ImpersonationBanner adminId={admin.userId} />
+        <main className="flex-1 p-6">{children}</main>
+      </div>
     </div>
   );
 }

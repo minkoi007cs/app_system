@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.4.0-rc.5** |
-| Current phase | **Phase 1–4 đã cài đặt xong phần mã nguồn** |
+| Current version | **v0.5.0** |
+| Current phase | **Phase 6 (Auto-provisioning) hoàn tất — gate G6 đóng** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
-| Last build | `PASS` — 6/6 packages, gồm `next build` 14 route (turbo 2.10.12) |
-| Last test | `PASS` — 18 test files, **239 tests** (core 174 · adapters 30 · web 15 · sdk 12 · db 8) |
-| Next task | **T5.18** — chống dò mật khẩu + HIBP + luồng khôi phục tài khoản |
+| Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
+| Last test | `PASS` — 27 test files, **365 tests** (core 277 · adapters 45 · web 15 · sdk 12 · db 16) |
+| Next task | **Phase 7** — Data API Gateway: Query DSL → SQL tham số hoá + áp policy phía server |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -111,18 +111,18 @@ pnpm install && pnpm build && pnpm test
 - [x] **T5.15** Workspace schema (`infra_workspaces`, `infra_workspace_members`, `workspace_id` NULLABLE) ✅
 - [x] **T5.16** Vòng đời user: mời, chuyển, vô hiệu hoá, offboard (thu hồi mọi token), soft delete + purge ✅
 - [x] **T5.17** `infra_service_accounts` + grant `client_credentials` + IP allowlist ✅
-- [ ] **T5.18** Chống dò mật khẩu, kiểm mật khẩu đã lộ (HIBP k-anonymity), luồng khôi phục tài khoản
-- [ ] **T5.19** Webhook sự kiện identity cho app con
-- [ ] **T5.20** Test: cách ly chéo app, tái sử dụng refresh token, leo thang quyền, mặc định từ chối
+- [x] **T5.18** Chống dò mật khẩu, kiểm mật khẩu đã lộ (HIBP k-anonymity), luồng khôi phục tài khoản ✅
+- [x] **T5.19** Webhook sự kiện identity cho app con ✅
+- [x] **T5.20** Test: cách ly chéo app, tái sử dụng refresh token, leo thang quyền, mặc định từ chối ✅
 - [ ] **G5** Gate → bump **v0.4.0**
 
-### Phase 6 — Auto-provisioning & Delegation  `NOT STARTED`  ← giai đoạn 2
-- [ ] **T6.1** Neon API: tự tạo project/branch khi tạo app mới
-- [ ] **T6.2** Turso API: tự tạo database + token
-- [ ] **T6.3** Tự mã hoá DSN vừa tạo, tự dọn khi xoá app
-- [ ] **T6.4** Theo dõi hạn mức free tier từng nhà cung cấp
-- [ ] **T6.5** Impersonation có lý do + hạn giờ + banner + audit (`infra_impersonation_sessions`)
-- [ ] **G6** Gate → bump **v0.5.0**
+### Phase 6 — Auto-provisioning & Delegation  `DONE`  ← giai đoạn 2
+- [x] **T6.1** Neon API: tự tạo project/branch khi tạo app mới ✅
+- [x] **T6.2** Turso API: tự tạo database + token ✅
+- [x] **T6.3** Tự mã hoá DSN vừa tạo, tự dọn khi xoá app ✅
+- [x] **T6.4** Theo dõi hạn mức free tier từng nhà cung cấp ✅
+- [x] **T6.5** Impersonation có lý do + hạn giờ + banner + audit (`infra_impersonation_sessions`) ✅
+- [x] **G6** Gate → bump **v0.5.0** ✅
 
 ### Phase 7 — Data API Gateway & Security Rules  `NOT STARTED`  ← giai đoạn 3
 - [ ] **T7.1** Query DSL có kiểu (`from().select().eq().order().limit()`)
@@ -185,6 +185,216 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-13 · v0.5.0 · feat(admin): time-boxed impersonation with a required reason and a standing banner
+
+**Deliverables**
+- `infra_impersonation_sessions` — bốn ràng buộc nằm ở **cấu trúc bảng**, không phải ở quy trình,
+  nên không ai "vội quá nên bỏ qua" được: `reason` NOT NULL · `expires_at` NOT NULL ·
+  `ended_at`/`ended_reason` phân biệt "hết giờ" với "chủ động dừng" · `read_only` mặc định **true**.
+- `startImpersonation` — chính các lệnh **từ chối** mới là tính năng:
+  · không tự mạo danh chính mình;
+  · **không mạo danh platform admin khác** — đó là đường đi ngang vào quyền của một admin thứ hai
+    mà chỉ cần credential của mình, đúng con đường leo thang phải chặn;
+  · lý do dưới 12 ký tự bị từ chối — một lý do không ai xử lý được thì bằng không có lý do;
+  · **không mở phiên thứ hai** khi phiên cũ còn sống, vì hai phiên mở cùng lúc làm audit trail mơ hồ
+    về việc hành động thuộc phiên nào — mà sự rõ ràng đó chính là toàn bộ giá trị của bản ghi.
+- Trần cứng **60 phút**; cần lâu hơn thì mở phiên mới với lý do mới. `expireImpersonations` đóng
+  phiên quá hạn để không còn dòng nào trông như đang mở mãi mãi.
+- `ImpersonationBanner` — **không phải trang trí mà là cái làm cho tính năng này an toàn để dùng.**
+  Thiếu một dấu hiệu thường trực, admin quên mình đang nhìn tài khoản ai, và thao tác kế tiếp rơi
+  vào dữ liệu khách hàng trong khi tưởng là của mình. Banner nằm ở **layout**, hiện trên mọi trang
+  dashboard, ghi rõ đang là ai · read-only hay không · còn bao nhiêu phút · và mang nút thoát.
+- Móc vào claim `act` sẵn có của JWT: token phát trong lúc mạo danh có `sub` = người bị mạo danh và
+  `act` = người thật. Audit chỉ nhìn `sub` sẽ ghi hành động của bộ phận hỗ trợ thành hành động của
+  khách hàng — test khoá đúng điểm này, kể cả trường hợp cố nhét `act` vào token sau khi đã ký.
+
+**Modified files**
+- `packages/db/src/schema/impersonation.ts` · `queries/impersonation.ts` (new)
+- `packages/db/src/schema/{audit-logs,index}.ts` · `queries/index.ts` (edit)
+- `apps/web/src/actions/impersonation.ts` (new)
+- `apps/web/src/components/{impersonation-banner,stop-impersonation-button}.tsx` (new)
+- `apps/web/src/app/(dashboard)/layout.tsx` (edit)
+- `packages/core/tests/impersonation-policy.test.ts` · `packages/db/tests/impersonation.test.ts` (new)
+- `packages/db/migrations/0010_keen_bromley.sql` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (365 passed / 365 — core 277 · adapters 45 · web 15 · sdk 12 · db 16)
+
+**Notes / decisions**
+- `beginImpersonation` gọi lại `requireSuperAdmin()` (allowlist env + dòng admin active + MFA còn
+  hạn 8 giờ) ngay trong server action: **một server action không bao giờ được tin rằng trang render
+  ra form đã canh cửa hộ nó**.
+- `read_only` mặc định true và phải xin mới có quyền ghi — nhìn là việc thường, hành động là ngoại lệ.
+- Banner gọi `expireImpersonations` trước khi hỏi phiên nào đang sống, nên một phiên đã hết giờ
+  **không bao giờ render ra như đang hoạt động**.
+
+**Next task** → **Phase 7** — Data API Gateway: Query DSL có kiểu → SQL tham số hoá cho cả hai
+phương ngữ, policy áp phía server, tách `/api/v1/data/:resource` (pk_) khỏi `/api/v1/query` (sk_).
+
+### 2026-09-13 · v0.4.1 · feat(provisioning): neon and turso auto-provisioning with quota tracking
+
+**Deliverables**
+- `provisioning/types.ts` — hợp đồng `DatabaseProvisioner`: `provision` · `deprovision` · `usage`,
+  cộng `isConfigured()` để UI làm mờ nhà cung cấp chưa có credential thay vì để nó lỗi lúc chạy.
+- `neon.provisioner.ts` — **một project cho mỗi app con**, không phải branch: project mới là đơn vị
+  Neon cô lập và tính hạn mức. Hai app dùng chung project sẽ dùng chung compute endpoint và chung
+  quota — đúng thứ nền tảng này sinh ra để tránh.
+- `turso.provisioner.ts` — tạo database rồi mint token **chỉ cho riêng database đó**. Một token
+  cấp org đưa vào config của một app sẽ là chìa khoá mở dữ liệu của mọi app khác.
+- **Không bao giờ để lại rác.** Provision là nhiều lệnh API nối nhau; lệnh sau hỏng thì lệnh trước
+  bị xoá trước khi ném lỗi. Free tier 10 slot đầy rất nhanh nếu mỗi lần lỗi để lại một project.
+- `infra_provisioned_resources` — ghi lại **external id** do nhà cung cấp trả về, và dùng
+  `on delete set null` để dòng này **sống lâu hơn dòng app**: một project Neon còn tồn tại mà không
+  ai biết là một slot mất vĩnh viễn. Thất bại giải phóng 5 lần → `orphaned` để người thật nhìn thấy.
+- `infra_provider_quotas` + `checkQuota` — **fail open** khi chưa có số liệu: từ chối tạo app chỉ vì
+  một job nền chưa chạy là biến job nền thành thứ chặn đường. Poll lỗi thì ghi `lastError` và
+  **giữ nguyên số cũ**, không ghi 0 — ghi 0 sẽ đọc thành "còn rất nhiều chỗ".
+- `apps/web/src/lib/provisioning.ts` — thứ tự: tạo ở nhà cung cấp → **ghi sổ** → niêm phong DSN.
+  Hỏng ở giữa thì xoá tài nguyên từ xa (chưa ai trỏ tới nó); hỏng ở bước cuối thì **giữ sổ** và
+  hoàn tác — sổ không có config thì lượt reclaim còn nhìn thấy, mất sổ thì không.
+- `providerFetch` — timeout cứng, và lỗi **chỉ mang status code, không bao giờ mang response body**:
+  nhà cung cấp echo lại một phần request vào thông báo lỗi chính là cách một API token lọt vào log.
+
+**Modified files**
+- `packages/adapters/src/provisioning/{types,http,neon.provisioner,turso.provisioner,index}.ts` (new)
+- `packages/adapters/src/index.ts` (edit)
+- `packages/db/src/schema/provisioning.ts` · `queries/provisioning.ts` (new)
+- `packages/db/src/schema/{audit-logs,index}.ts` · `queries/index.ts` (edit)
+- `apps/web/src/lib/provisioning.ts` (new)
+- `packages/adapters/tests/provisioning.test.ts` · `packages/db/tests/provisioning.test.ts` (new)
+- `packages/db/migrations/0009_exotic_elektra.sql` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (359 passed / 359 — core 273 · adapters 45 · web 15 · sdk 12 · db 14)
+
+**Notes / decisions**
+- **Supabase không có API tạo project ở free tier**, nên nó vắng mặt một cách có chủ đích trong
+  registry: `createProvisioner('supabase')` ném lỗi nói thẳng điều đó. Hứa hỗ trợ rồi hỏng lúc chạy
+  còn tệ hơn nói không ngay từ đầu.
+- Provisioner nhận `fetchImpl` để test chạy trên một fetch kịch bản — thứ cần chứng minh ở đây không
+  phải là API của Neon hoạt động, mà là **hỏng giữa chừng không để lại tài nguyên mồ côi**.
+- Credential nhà cung cấp đọc từ env (`NEON_API_KEY`, `TURSO_API_TOKEN`, `TURSO_ORGANIZATION`),
+  **không** thêm vào `serverEnvSchema`: thiếu chúng thì tính năng tắt, chứ không làm sập cả tiến trình.
+
+**Next task** → `T6.5` impersonation có lý do + hạn giờ + banner + audit.
+
+### 2026-09-13 · v0.4.0 · feat(webhooks): signed identity events, ssrf-guarded delivery and the G5 security suite
+
+**Deliverables**
+- `webhook.ts` — chữ ký HMAC-SHA256 trên **`timestamp.body`**, gửi dạng `t=…,v1=…`, so khớp
+  constant-time trong cửa sổ 5 phút. Ký mỗi body là lỗi kinh điển: làm vậy thì mọi delivery đều
+  **replay được vĩnh viễn**. Timestamp nằm *trong* phần được ký nên không sửa được để nới cửa sổ.
+- `isPublicHttpUrl` — chốt chặn **SSRF**. Webhook nghĩa là nền tảng tự gửi request tới địa chỉ do
+  tenant chọn, từ bên trong mạng của mình. Chỉ nhận https, cổng 443, không credential trong URL;
+  chặn loopback, RFC1918, link-local (**169.254.169.254 — metadata endpoint của cloud**), CGNAT,
+  `.local`/`.internal`, IPv6 ULA.
+- `webhook-dispatch.ts` — **từ chối redirect** (`redirect: 'manual'`): một host công khai 302 về
+  169.254.169.254 sẽ vô hiệu hoá mọi phép kiểm URL đơn thuần. Có timeout cứng 8s, và **không đọc
+  response body** — đó là văn bản do bên kia kiểm soát, đọc nó là tự rước slow-loris.
+- `infra_webhook_endpoints` / `infra_webhook_deliveries` — secret ký lưu bằng **AES-256-GCM** với
+  AAD buộc theo dòng; hàng đợi nằm trong **bảng chứ không phải timer trong tiến trình**, vì lịch
+  retry sống trong RAM là lịch retry bị một lần deploy huỷ im lặng. Retry 30s → ×4 → trần 6h,
+  6 lần; 4xx (trừ 408/429) là "đừng gửi nữa" → `dropped`, không phải `failed`. Breaker tắt endpoint
+  sau 20 lần hỏng liên tiếp.
+- Phát sự kiện ở đúng chỗ: `user.suspended` · `user.reinstated` · `user.offboarded` ·
+  `user.password_reset` · `member.joined`. **Luôn phát sau khi đã thu hồi**, không phải trước —
+  app con phản ứng bằng cách xoá dữ liệu cục bộ thì không được nghe tin trong lúc token còn sống.
+- `POST /api/v1/webhooks` — chỉ nhận khoá `sk_` + scope `admin`; secret trả về **đúng một lần**.
+- `POST /api/internal/webhooks/drain` — dùng token nội bộ của nền tảng, so sánh constant-time.
+- **T5.20 `security-properties.test.ts`** — 22 test ghép các module lại đúng như đường request,
+  chứng minh bốn tính chất: cách ly chéo app (aud sai · kid lạ · chữ ký tráo · issuer khác),
+  họ refresh token, không leo thang quyền (`pk_` không bao giờ có `db:write`; `db:*` **không** khớp
+  `database:read`; gộp role là phép hợp, không phải nâng cấp), và mặc định từ chối (tài nguyên
+  không được nhắc tới → deny, và deny **biên dịch ra SQL không bao giờ đúng**).
+
+**Modified files**
+- `packages/core/src/webhook.ts` (new) · `src/index.ts` (edit)
+- `packages/db/src/schema/webhooks.ts` (new) · `queries/webhooks.ts` (new)
+- `packages/db/src/queries/lifecycle.ts` · `schema/{audit-logs,index}.ts` · `queries/index.ts` (edit)
+- `packages/auth/src/recovery.ts` (edit)
+- `apps/web/src/lib/webhook-dispatch.ts` (new)
+- `apps/web/src/app/api/v1/webhooks/route.ts` · `api/internal/webhooks/drain/route.ts` (new)
+- `packages/core/tests/{webhook,security-properties}.test.ts` (new)
+- `packages/db/migrations/0008_curved_miek.sql` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package, `next build` 18 route)
+- `pnpm test`  → PASS (338 passed / 338 — core 273 · adapters 30 · web 15 · sdk 12 · db 8)
+
+**Notes / decisions**
+- **Phát sự kiện và gửi đi là hai việc tách rời.** Một sự kiện identity phải được ghi lại bất kể
+  server của tenant có sống hay không, và request gây ra nó không được chờ socket của bên thứ ba.
+  Nên đường phát chỉ ghi dòng rồi trả về; một lượt drain mới thực sự gửi.
+- `verifyWebhook` đặt trong `@infra/core` chứ không phải trong SDK, **cố ý**: như vậy đúng đoạn mã
+  mà app con sẽ chạy ở đầu nhận cũng chính là đoạn được test ở đây.
+- Chấp nhận nhiều `v1=` trong một header để xoay secret mà không rớt delivery nào.
+- Phép kiểm URL là kiểm trên chuỗi, **không resolve DNS** — nên vẫn còn đường DNS rebinding. Đã bù
+  bằng việc chặn redirect; muốn chắc hơn thì cho webhook đi qua proxy ghim địa chỉ đã resolve.
+  Ghi thành rủi ro **R10**.
+
+**Next task** → **Phase 6** — tự động cấp database qua Neon API + Turso API khi tạo app con.
+
+### 2026-09-13 · v0.4.0-rc.6 · feat(auth): brute-force throttling, breached-password checks and account recovery
+
+**Deliverables**
+- `throttle.ts` — đường cong khoá đăng nhập thuần hàm. 5 lần sai đầu miễn phí (gõ nhầm không mất gì),
+  sau đó 30s và nhân đôi, **chặn trần 15 phút** — khoá vĩnh viễn chính là một lỗ DoS ai cũng nhắm được
+  vào người khác bằng cách cố gõ sai. Bộ đếm tự quên sau 1 giờ im lặng.
+  Hai trục đếm: `(IP, email)` cho dò một tài khoản và `IP` cho credential stuffing —
+  **không bao giờ đếm theo email đơn lẻ**, vì như thế kẻ tấn công khoá được nạn nhân từ bất kỳ đâu.
+- `password.ts` — kiểm mật khẩu đã lộ qua HIBP **k-anonymity**: chỉ gửi 5 ký tự đầu của SHA-1,
+  dịch vụ trả về ~800 hậu tố, việc so khớp làm tại chỗ — mật khẩu không bao giờ rời tiến trình.
+  Có xử lý `Add-Padding`: bản ghi mồi có count 0 phải đọc là "không tìm thấy", nếu không thì
+  padding lại trở thành thứ phân biệt được.
+- `recovery.ts` + `opaque-token.ts` — token `rec_` 192 bit, chỉ lưu SHA-256, **sống 15 phút**.
+  `invitation.ts` refactor dùng chung một cài đặt để cả hai loại link đều có đúng ba thuộc tính đó.
+- `infra_login_attempts` — khoá theo **digest** của (scope, ip, email), nên bảng không chứa email hay
+  IP dạng thường: một bản dump của nó không biến thành danh sách ai có tài khoản ở đây.
+- `infra_recovery_tokens` — đốt token bằng `UPDATE … WHERE used_at IS NULL RETURNING`, nguyên tử,
+  hai lần đổi đồng thời thì đúng một lần thắng.
+- `auth-shield.ts` — lớp chắn đặt **trước** Better Auth (không sửa ruột thư viện, nên nâng cấp không vỡ):
+  throttle `/sign-in/email`; kiểm mật khẩu ở `/sign-up/email`, `/reset-password`, `/change-password`;
+  mọi câu trả lời được đệm về cùng một khoảng thời gian.
+- `POST /api/v1/auth/recovery/request` · `…/confirm` — request luôn trả **202 giống hệt nhau**
+  dù email có tồn tại hay không, và token **không bao giờ** nằm trong response body.
+
+**Modified files**
+- `packages/core/src/{opaque-token,recovery,throttle,password}.ts` (new)
+- `packages/core/src/{invitation,index}.ts` (edit)
+- `packages/db/src/schema/security.ts` (new) · `schema/{refresh-tokens,audit-logs,index}.ts` (edit)
+- `packages/db/src/queries/security.ts` (new) · `queries/index.ts` (edit)
+- `packages/auth/src/recovery.ts` (new) · `src/index.ts` (edit)
+- `apps/web/src/lib/{auth-shield,recovery-delivery}.ts` (new)
+- `apps/web/src/app/api/auth/[...all]/route.ts` (edit)
+- `apps/web/src/app/api/v1/auth/recovery/{request,confirm}/route.ts` (new)
+- `packages/core/tests/{throttle,password,recovery}.test.ts` (new)
+- `packages/db/migrations/0007_odd_cerise.sql` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package, `next build` 16 route)
+- `pnpm test`  → PASS (293 passed / 293 — core 228 · adapters 30 · web 15 · sdk 12 · db 8)
+
+**Notes / decisions**
+- **Hai hướng thất bại ngược nhau, cố ý.** Luật cục bộ (quá ngắn, chứa email) **fail closed** —
+  không tốn gì và không phụ thuộc gì. Tra cứu HIBP **fail open** — nếu để nó chặn thì một sự cố của
+  bên thứ ba sẽ khoá toàn bộ đăng ký và khôi phục tài khoản của cả nền tảng. `breachCount: null`
+  ghi lại rằng lần đó không kiểm được, thay vì giả vờ đã kiểm.
+- **Thứ tự trong `completePasswordRecovery` không phải thứ tự hiển nhiên:** xem token còn sống →
+  chấm mật khẩu mới → **rồi mới** đốt token. Đốt trước thì người dùng thật chọn nhầm một mật khẩu yếu
+  sẽ mất luôn link khôi phục của chính mình.
+- **Bước ai cũng quên là bước 5:** sau khi đổi mật khẩu phải thu hồi *mọi* session, refresh token và
+  thiết bị đã nhớ. Nếu tài khoản đã bị chiếm, kẻ tấn công đang giữ một session sống — đổi mật khẩu mà
+  không thu hồi thì tài khoản "đã khôi phục" vẫn nằm trong tay họ.
+- Mật khẩu vẫn do Better Auth băm (`auth.$context.password.hash` + `internalAdapter`), không tự băm —
+  chọn thuật toán băm lần thứ hai là chọn sai lần thứ hai.
+- Một test đã bắt được lỗi thật: `Khoi-Hoang-2026!` không *literal* chứa `khoi.hoang@example.com`,
+  nên phép so khớp thô cho qua. Đã sửa: rút cả hai vế về chỉ chữ và số trước khi so.
+- **Chưa có mailer** → link khôi phục hiện chỉ in ra console ở môi trường dev. Ghi thành rủi ro R8.
+
+**Next task** → `T5.19` webhook sự kiện identity cho app con.
 
 ### 2026-09-10 · v0.1.4 · feat(adapters): add multi-database engine with resolver, pool and health checks
 
@@ -368,3 +578,6 @@ pnpm install && pnpm build && pnpm test
 | R5 | Better Auth thay đổi API giữa các version | Trung bình | Pin version chính xác, cô lập trong `packages/auth` |
 | R6 | Turso/LibSQL khác biệt phương ngữ SQL với PG | Trung bình | Adapter khai báo `dialect`; SDK không hứa hẹn SQL đa phương ngữ |
 | R7 | Thư mục kết nối bị gắn lại → mất file chưa commit | Cao (đã xảy ra 1 lần) | Commit git sớm và thường xuyên; giữ bản sao tài liệu trong phiên trước khi ghi xuống máy |
+| R8 | Chưa có mailer → link khôi phục không gửi được ở production | Cao (chặn luồng khôi phục thật) | `deliverRecoveryLink` in ra console ở dev và **log lỗi rõ ràng** ở production thay vì nuốt im lặng; nối transport thật ở Phase 8 |
+| R9 | HIBP nằm ngoài allowlist egress → không kiểm được mật khẩu lộ | Trung bình | Fail open có chủ đích; `breachCheckPerformed: false` vào audit để biết lần nào chưa kiểm |
+| R10 | DNS rebinding: host webhook công khai nhưng resolve về địa chỉ nội bộ | Cao | `isPublicHttpUrl` chặn theo URL + **từ chối redirect**; cần chắc hơn thì egress qua proxy ghim IP đã resolve |

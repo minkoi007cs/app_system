@@ -13,3 +13,4 @@ export * from './factory.js';
 export * from './pool.js';
 export * from './resolver.js';
 export * from './health.js';
+export * from './provisioning/index.js';

@@ -30,6 +30,7 @@ import {
 } from '@infra/core';
 import {
   consumeRecoveryToken,
+  emitToUserAppsAsync,
   issueRecoveryToken,
   peekRecoveryToken,
   revokeAllUserCredentials,
@@ -136,6 +137,12 @@ export async function completePasswordRecovery(
 
   // 5 — nothing the previous password could reach stays reachable.
   const revoked = await revokeAllUserCredentials(db, consumed.userId, 'password_reset');
+
+  // Child apps care: a password reset is the signal to drop any cached session of their own.
+  emitToUserAppsAsync(db, consumed.userId, 'user.password_reset', {
+    userId: consumed.userId,
+    sessionsRevoked: revoked.sessionsRemoved,
+  });
 
   return { userId: consumed.userId, assessment, revoked };
 }

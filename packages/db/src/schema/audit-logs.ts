@@ -17,6 +17,9 @@ export const AUDIT_ACTIONS = [
   'db.config.updated',
   'db.config.deleted',
   'db.query.executed',
+  'db.provisioned',
+  'db.provision.failed',
+  'db.released',
   'auth.signin',
   'auth.signout',
   'auth.token.issued',
@@ -29,6 +32,8 @@ export const AUDIT_ACTIONS = [
   'auth.recovery.requested',
   'auth.recovery.completed',
   'auth.recovery.failed',
+  'impersonation.started',
+  'impersonation.ended',
   'access.granted',
   'access.denied',
   'role.assigned',
@@ -44,6 +49,9 @@ export const AUDIT_ACTIONS = [
   'user.transferred',
   'service_account.created',
   'service_account.revoked',
+  'webhook.endpoint.created',
+  'webhook.endpoint.disabled',
+  'webhook.secret.rotated',
   'health.check',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

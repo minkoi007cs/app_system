@@ -27,6 +27,7 @@ import { infraRoleAssignments } from '../schema/access.js';
 import { infraRefreshTokens } from '../schema/refresh-tokens.js';
 import { infraTrustedDevices } from '../schema/mfa.js';
 import { session } from '../schema/auth.js';
+import { emitToUserAppsAsync } from './webhooks.js';
 
 // ── invitations ──────────────────────────────────────────────────────────────
 
@@ -120,6 +121,12 @@ export async function acceptInvitation(
     .values({ appId: invitation.appId, userId: acceptingUserId, role: invitation.role as 'member' })
     .onConflictDoNothing();
 
+  emitToUserAppsAsync(db, acceptingUserId, 'member.joined', {
+    userId: acceptingUserId,
+    appId: invitation.appId,
+    role: invitation.role,
+  });
+
   return { appId: invitation.appId, role: invitation.role };
 }
 
@@ -189,6 +196,10 @@ export async function offboardUser(
 
   await setStatus(db, userId, 'offboarded', changedBy, reason, { offboardedAt: now });
 
+  // Emitted after the revocations, never before: a child app that reacts by deleting local data
+  // must not be told the person is gone while their token still works.
+  emitToUserAppsAsync(db, userId, 'user.offboarded', { userId, reason });
+
   return {
     refreshTokensRevoked: refreshTokens.length,
     sessionsRemoved: sessions.length,
@@ -213,11 +224,13 @@ export async function suspendUser(
 
   await db.delete(session).where(eq(session.userId, userId));
   await setStatus(db, userId, 'suspended', changedBy, reason, { suspendedAt: now });
+  emitToUserAppsAsync(db, userId, 'user.suspended', { userId, reason });
   return revoked.length;
 }
 
 export async function reinstateUser(db: MasterDatabase, userId: string, changedBy: string): Promise<void> {
   await setStatus(db, userId, 'active', changedBy, null, { suspendedAt: null, offboardedAt: null });
+  emitToUserAppsAsync(db, userId, 'user.reinstated', { userId });
 }
 
 /** Marks for deletion after a grace period rather than destroying data immediately. */

@@ -12,5 +12,8 @@ export * from './workspaces.js';
 export * from './lifecycle.js';
 export * from './service-accounts.js';
 export * from './security.js';
+export * from './webhooks.js';
+export * from './provisioning.js';
+export * from './impersonation.js';
 export * from './auth.js';
 export * from './relations.js';
