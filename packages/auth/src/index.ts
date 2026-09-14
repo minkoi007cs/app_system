@@ -21,3 +21,4 @@ export * from './tokens.js';
 export * from './passkey.js';
 export * from './access.js';
 export * from './recovery.js';
+export * from './gateway.js';

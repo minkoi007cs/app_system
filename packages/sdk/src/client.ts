@@ -1,5 +1,6 @@
 import { createAuthClient } from './auth.js';
 import { createDbClient } from './db.js';
+import { QueryBuilder } from './query-builder.js';
 import { normaliseBaseUrl } from './http.js';
 import type { InfraClient, InfraClientOptions } from './types.js';
 
@@ -40,5 +41,8 @@ export function createInfraClient(options: InfraClientOptions): InfraClient {
     baseUrl: resolved.baseUrl,
     auth: createAuthClient(resolved),
     db: createDbClient(resolved),
+    // The rules-enforced path. `db.query` is raw SQL and needs an sk_ key; `from` works with a
+    // publishable key because the server builds the statement, not the caller.
+    from: <R = Record<string, unknown>>(resource: string) => new QueryBuilder<R>(resolved, resource),
   };
 }

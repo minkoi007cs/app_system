@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.5.0** |
-| Current phase | **Phase 6 (Auto-provisioning) hoàn tất — gate G6 đóng** |
+| Current version | **v0.5.1** |
+| Current phase | **Phase 7 đang chạy — T7.1→T7.4 xong, còn T7.5/T7.6** |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 27 test files, **365 tests** (core 277 · adapters 45 · web 15 · sdk 12 · db 16) |
-| Next task | **Phase 7** — Data API Gateway: Query DSL → SQL tham số hoá + áp policy phía server |
+| Last test | `PASS` — 31 test files, **429 tests** (core 329 · adapters 45 · sdk 24 · web 15 · db 16) |
+| Next task | **T7.5** — decision log + đo overhead của rules |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -124,11 +124,11 @@ pnpm install && pnpm build && pnpm test
 - [x] **T6.5** Impersonation có lý do + hạn giờ + banner + audit (`infra_impersonation_sessions`) ✅
 - [x] **G6** Gate → bump **v0.5.0** ✅
 
-### Phase 7 — Data API Gateway & Security Rules  `NOT STARTED`  ← giai đoạn 3
-- [ ] **T7.1** Query DSL có kiểu (`from().select().eq().order().limit()`)
-- [ ] **T7.2** Biên dịch DSL → SQL tham số hoá cho Postgres và LibSQL
-- [ ] **T7.3** Áp policy: server chèn điều kiện, client chỉ thu hẹp được
-- [ ] **T7.4** `POST /api/v1/data/:resource` (pk_ + Bearer) tách khỏi `/api/v1/query` (sk_ only)
+### Phase 7 — Data API Gateway & Security Rules  `IN PROGRESS`  ← giai đoạn 3
+- [x] **T7.1** Query DSL có kiểu (`from().select().eq().order().limit()`) ✅
+- [x] **T7.2** Biên dịch DSL → SQL tham số hoá cho Postgres và LibSQL ✅
+- [x] **T7.3** Áp policy: server chèn điều kiện, client chỉ thu hẹp được ✅
+- [x] **T7.4** `POST /api/v1/data/:resource` (pk_ + Bearer) tách khỏi `/api/v1/query` (sk_ only) ✅
 - [ ] **T7.5** Decision log + đo hiệu năng overhead của rules
 - [ ] **T7.6** Test: cố tình vượt rào rules, SQL injection qua DSL, nới rộng filter
 - [ ] **G7** Gate → bump **v0.6.0**
@@ -185,6 +185,70 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-14 · v0.5.1 · feat(gateway): typed query dsl, dual-dialect compiler and the rules-enforced data endpoint
+
+**Deliverables**
+- `query-dsl.ts` — ngữ pháp JSON có kiểu, **không có cửa thoát**: không `raw`, không mảnh `sql`,
+  không `having` tự do. Một cửa thoát là đủ để 99 luật còn lại thành trang trí.
+  Ba luật là an toàn chứ không phải khẩu vị:
+  · **Khoá lạ bị từ chối, không bị bỏ qua** — client gửi `wheres` thay vì `filters` rồi nhận về
+    dữ liệu chưa lọc thì tệ hơn nhận lỗi: nó *tin là mình đã lọc*.
+  · **`update`/`delete` bắt buộc có ít nhất một filter** — policy dễ dãi biên dịch ra `1 = 1`, nên
+    `delete ... where 1 = 1` là cả bảng. Thiếu WHERE phải là điều **không diễn đạt nổi**.
+  · **`limit` có trần và có mặc định** — select không giới hạn trên DB free tier 0.5 GB là một cú
+    DoS tốn của kẻ tấn công đúng một request.
+- **Bỏ hẳn `like`, chỉ giữ `ilike`.** Postgres `LIKE` phân biệt hoa thường, SQLite `LIKE` thì không.
+  Giữ cả hai nghĩa là cùng một câu truy vấn trả kết quả khác nhau tuỳ app con nằm ở nhà cung cấp
+  nào. Một toán tử một nghĩa đáng giá hơn hai toán tử kèm một cái bẫy.
+- `query-compiler.ts` — hợp đồng một câu: **không chuỗi nào của người gọi lọt vào `sql`**. Test
+  khẳng định sự *vắng mặt* của chuỗi người gọi, chứ không chỉ sự có mặt của placeholder.
+  `limit`/`offset` cũng bind dù chúng là số do chính module sinh ra — để trong file này **không tồn
+  tại tiền lệ "nội suy an toàn"** cho một lần sửa sau copy theo.
+- `ConditionCompiler` nhận **cả `startIndex` lẫn `dialect`**. Đây là sửa do một test bắt được: điều
+  kiện biên dịch kiểu postgres (`$1`) ghép vào câu libsql (`?`) trông vẫn *hợp lệ* — văn bản đúng,
+  mảng tham số thiếu đúng một phần tử, và **mọi giá trị sau đó bind lệch cột**. Để compiler quyết
+  định dialect thì sai lầm đó biến mất khỏi API.
+- `evaluateDecisionForRow` — INSERT không có WHERE để gắn điều kiện, nên policy được chấm **trực
+  tiếp trên dòng dữ liệu**. Phần quan trọng là `undecidable`: policy đòi `owner_id` mà dòng không
+  đặt `owner_id` thì câu trả lời **không phải "cho phép"** — cột đó sẽ nhận DEFAULT của bảng. Coi
+  đó là cho phép chính là cách một dòng ra đời mà không thuộc về ai.
+- `gateway.ts` — `checkAccess` → (insert: chấm dòng) → biên dịch với điều kiện AND vào.
+  `appId` từ khoá API đã xác thực, subject từ access token đã xác thực, dialect từ config DB của
+  chính app. Body chỉ được quyết định **hình dạng và giá trị**, không gì khác.
+- `POST /api/v1/data/:resource` — chấp nhận `pk_`, vì khoá publishable **công khai theo thiết kế**
+  và điều đó chỉ an toàn khi người gọi *không thể* viết SQL tuỳ ý và *không thể* thoát khỏi bộ lọc
+  dòng. `/api/v1/query` giữ nguyên: SQL thô, chỉ `sk_`.
+- Không có access token và khoá không thuộc service account → **từ chối**, không coi là ẩn danh.
+  Đọc ẩn danh là thứ app phải bật có chủ đích, mà cơ chế đó chưa tồn tại.
+- `QueryBuilder` trong SDK — `infra.from('notes').select('id').eq('done', false)`. Lớp mỏng có chủ
+  đích: **bỏ qua nó cũng không thay đổi gì**, vì server parse lại mọi thứ. Một builder mà server
+  tin tưởng là một builder kẻ tấn công chỉ việc không dùng.
+
+**Modified files**
+- `packages/core/src/{query-dsl,query-compiler}.ts` (new) · `src/{policy,index}.ts` (edit)
+- `packages/auth/src/gateway.ts` (new) · `src/index.ts` (edit)
+- `apps/web/src/app/api/v1/data/[resource]/route.ts` (new)
+- `packages/sdk/src/query-builder.ts` (new) · `src/{client,types,index}.ts` (edit)
+- `packages/core/tests/{query-dsl,query-compiler,row-policy}.test.ts` (new)
+- `packages/sdk/tests/query-builder.test.ts` (new)
+
+**Test status**
+- `pnpm build` → PASS (6/6 package)
+- `pnpm test`  → PASS (429 passed / 429 — core 329 · adapters 45 · sdk 24 · web 15 · db 16)
+- Không có migration mới: Phase 7 chưa thêm bảng nào.
+
+**Notes / decisions**
+- Điều kiện policy được **biên dịch lại bên trong** compiler thay vì dùng `access.condition` có sẵn:
+  chỉ compiler mới biết chỉ số placeholder cuối cùng, và một điều kiện đánh số theo phỏng đoán sẽ
+  bind mọi giá trị sau đó vào sai cột.
+- Mảnh điều kiện **luôn được bọc ngoặc**, kể cả khi thừa: một mảnh `a or b` không bọc, đem AND với
+  filter của người gọi, sẽ kết hợp lỏng hơn dự định và **nới rộng kết quả**.
+- Client chỉ có thể thu hẹp: test cố lọc `owner_id = 'user_2'` vẫn AND với `owner_id = 'user_1'`
+  của server → câu lệnh trả về rỗng, không phải dữ liệu người khác.
+
+**Next task** → `T7.5` decision log + đo overhead của rules, rồi `T7.6` bộ test adversarial khép
+gate G7 và bump v0.6.0.
 
 ### 2026-09-13 · v0.5.0 · feat(admin): time-boxed impersonation with a required reason and a standing banner
 

@@ -269,3 +269,105 @@ export function compileDecision(
 
   return compileCondition({ op: 'and', clauses: decision.conditions }, subject, dialect, startIndex);
 }
+
+// ── evaluating a condition against a row, for INSERT ─────────────────────────
+
+/**
+ * An insert has no WHERE clause, so a row-level policy cannot be attached to the statement — it has
+ * to be checked against the row the caller proposes, here, before the statement is built.
+ *
+ * The important half is `undecidable`. If a policy says `owner_id = subject.id` and the submitted
+ * row does not set `owner_id`, the answer is not "allowed" and not "denied" — it is "this policy
+ * cannot be evaluated", because the column's value will be whatever the table's DEFAULT produces.
+ * Treating that as allowed is how a row lands owned by nobody, or by the database's idea of
+ * `current_user`. So the caller fails closed on a non-empty `undecidable`.
+ */
+export interface RowEvaluation {
+  satisfied: boolean;
+  /** Columns the condition needed that the row does not set. Non-empty means: refuse. */
+  undecidable: string[];
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  // Deliberately not ==: a policy comparing to the string '1' must not match the number 1.
+  return a === b;
+}
+
+export function evaluateConditionForRow(
+  condition: PolicyCondition,
+  subject: PolicySubject,
+  row: Readonly<Record<string, unknown>>,
+): RowEvaluation {
+  const undecidable: string[] = [];
+
+  const valueOf = (field: string): unknown => {
+    const key = field.trim().toLowerCase();
+    if (!(key in row)) {
+      undecidable.push(key);
+      return undefined;
+    }
+    return row[key];
+  };
+
+  const walk = (node: PolicyCondition): boolean => {
+    switch (node.op) {
+      case 'always':
+        return true;
+      case 'never':
+        return false;
+      case 'is_null':
+        return valueOf(node.field) === null;
+      case 'is_not_null': {
+        const value = valueOf(node.field);
+        return value !== null && value !== undefined;
+      }
+      case 'eq':
+        return sameValue(valueOf(node.field), resolveAttribute(node.value, subject));
+      case 'neq':
+        return !sameValue(valueOf(node.field), resolveAttribute(node.value, subject));
+      case 'lt':
+      case 'lte':
+      case 'gt':
+      case 'gte': {
+        const left = valueOf(node.field);
+        const right = resolveAttribute(node.value, subject);
+        if (typeof left !== typeof right || left === null || right === null) return false;
+        const a = left as number | string;
+        const b = right as number | string;
+        if (node.op === 'lt') return a < b;
+        if (node.op === 'lte') return a <= b;
+        if (node.op === 'gt') return a > b;
+        return a >= b;
+      }
+      case 'in':
+      case 'not_in': {
+        const left = valueOf(node.field);
+        const candidates = node.values.map((ref) => resolveAttribute(ref, subject)).flat();
+        const found = candidates.some((candidate) => sameValue(left, candidate));
+        return node.op === 'in' ? found : !found;
+      }
+      case 'and':
+        // Every clause is walked even after a false, so `undecidable` is complete rather than
+        // short-circuited — the caller gets the full list of what the row is missing.
+        return node.clauses.map(walk).every(Boolean);
+      case 'or':
+        return node.clauses.map(walk).some(Boolean);
+      default:
+        return false;
+    }
+  };
+
+  const satisfied = walk(condition);
+  return { satisfied, undecidable: [...new Set(undecidable)] };
+}
+
+/** Applies every condition of an allow decision to a proposed row. */
+export function evaluateDecisionForRow(
+  decision: PolicyDecision,
+  subject: PolicySubject,
+  row: Readonly<Record<string, unknown>>,
+): RowEvaluation {
+  if (decision.effect === 'deny') return { satisfied: false, undecidable: [] };
+  if (decision.conditions.length === 0) return { satisfied: true, undecidable: [] };
+  return evaluateConditionForRow({ op: 'and', clauses: decision.conditions }, subject, row);
+}

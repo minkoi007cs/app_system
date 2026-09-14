@@ -1,3 +1,5 @@
+import type { QueryBuilder } from './query-builder.js';
+
 /**
  * @infra/sdk public types.
  * This package is shipped to child apps: it must stay dependency-free and must never
@@ -92,5 +94,11 @@ export interface InfraAuthClient {
 export interface InfraClient {
   readonly baseUrl: string;
   auth: InfraAuthClient;
+  /** Raw SQL. Needs an `sk_` key and bypasses the rules engine — server side only. */
   db: InfraDbClient;
+  /**
+   * The rules-enforced query builder. Safe with a publishable key, because the server builds the
+   * statement from this description and always ANDs the caller's policy condition into it.
+   */
+  from: <R = Record<string, unknown>>(resource: string) => QueryBuilder<R>;
 }

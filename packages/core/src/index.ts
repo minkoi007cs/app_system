@@ -13,6 +13,8 @@ export * from './refresh-token.js';
 export * from './totp.js';
 export * from './permissions.js';
 export * from './policy.js';
+export * from './query-dsl.js';
+export * from './query-compiler.js';
 export * from './opaque-token.js';
 export * from './invitation.js';
 export * from './recovery.js';
