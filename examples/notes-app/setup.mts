@@ -8,25 +8,47 @@
  * Needs the Master DB credentials because it writes the app, keys and policies directly. It never
  * prints a connection string, and it prints each API key exactly once because that is the only
  * moment either of them exists in readable form.
+ *
+ * ── 2026-09-15 ──────────────────────────────────────────────────────────────
+ * This file had never run before today. It imported `registerApp`, which does not exist in
+ * `@infra/db` — the import alone would have thrown. It also passed `createdBy` to `createApp`,
+ * whose row requires `ownerUserId`. Two errors, neither reachable by any test, in the script that
+ * backs this repo's headline claim. The lesson the rest of the project keeps relearning applies
+ * here too: a path nobody has executed is not a working path, however carefully it reads.
  */
 import { createAdapter } from '@infra/adapters';
+import { addMember, auth } from '@infra/auth';
 import { assertMasterKey } from '@infra/core';
 import {
+  assignRole,
+  createApp,
   createPolicy,
   createRole,
   getAppBySlug,
+  getPrimaryDatabaseConfig,
   issueApiKey,
   listPolicies,
   listRoles,
+  findUserByEmail,
   masterDb,
-  registerApp,
   revealConnectionString,
-  getPrimaryDatabaseConfig,
+  upsertDatabaseConfig,
 } from '@infra/db';
 
 const APP_SLUG = process.env.APP_SLUG ?? 'notes-app';
 const APP_NAME = process.env.APP_NAME ?? 'Notes';
 const TABLE = process.env.APP_TABLE ?? 'notes';
+
+/**
+ * Where this app's database comes from. Either of:
+ *
+ *   REUSE_DB_FROM=<slug>       share the database already attached to another app
+ *   NOTES_DATABASE_URL=<dsn>   attach a tenant database directly (never printed)
+ *
+ * Neither is needed once a database is attached — the next run finds it and moves on.
+ * Auto-provisioning (Phase 6) is a third way and needs NEON_API_KEY; this script does not use it.
+ */
+const REUSE_DB_FROM = process.env.REUSE_DB_FROM ?? '';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -44,15 +66,24 @@ async function main(): Promise<void> {
   const db = masterDb();
 
   // ── 1. the app ─────────────────────────────────────────────────────────────
+  // `ownerUserId` is not optional on the row. The example has no human owner, so it carries a
+  // marker id that is obviously not a person — better than inventing a fake user row that later
+  // turns up in a user list nobody can explain.
   const existing = await getAppBySlug(db, APP_SLUG);
-  const app = existing ?? (await registerApp(db, { slug: APP_SLUG, name: APP_NAME, createdBy: 'setup-script' }));
+  const app =
+    existing ??
+    (await createApp(db, {
+      slug: APP_SLUG,
+      name: APP_NAME,
+      ownerUserId: process.env.APP_OWNER_ID ?? 'example-setup-script',
+    }));
   console.info(`app ${app.slug} → ${app.id}${existing === null ? ' (created)' : ' (existing)'}`);
 
   // ── 2. keys ────────────────────────────────────────────────────────────────
   const publishable = await issueApiKey(db, {
     appId: app.id,
     name: 'browser',
-    createdBy: 'setup-script',
+    createdBy: app.ownerUserId,
     kind: 'publishable',
     scopes: ['db:read', 'auth:read'],
   });
@@ -60,7 +91,7 @@ async function main(): Promise<void> {
   const secret = await issueApiKey(db, {
     appId: app.id,
     name: 'server',
-    createdBy: 'setup-script',
+    createdBy: app.ownerUserId,
     kind: 'secret',
     scopes: ['db:read', 'db:write', 'auth:read'],
   });
@@ -70,11 +101,40 @@ async function main(): Promise<void> {
   console.info('  INFRA_SECRET_KEY=' + secret.rawKey + '\n');
 
   // ── 3. the table, in the app's own database ────────────────────────────────
-  const config = await getPrimaryDatabaseConfig(db, app.id);
+  let config = await getPrimaryDatabaseConfig(db, app.id);
+
+  if (config === null && REUSE_DB_FROM !== '') {
+    // Share another app's database. The ciphertext cannot simply be copied across: the AAD binds
+    // it to its own (appId, configId), so it is decrypted here and re-encrypted under this row.
+    const donorApp = await getAppBySlug(db, REUSE_DB_FROM);
+    const donor = donorApp === null ? null : await getPrimaryDatabaseConfig(db, donorApp.id);
+    if (donor === null) {
+      console.error(`REUSE_DB_FROM=${REUSE_DB_FROM} has no database attached`);
+      process.exit(1);
+    }
+    config = await upsertDatabaseConfig(db, {
+      appId: app.id,
+      provider: donor.provider,
+      label: `shared with ${REUSE_DB_FROM}`,
+      connectionString: revealConnectionString(donor),
+    });
+    console.info(`database attached, shared with ${REUSE_DB_FROM} (${donor.provider})`);
+  } else if (config === null && (process.env.NOTES_DATABASE_URL ?? '') !== '') {
+    config = await upsertDatabaseConfig(db, {
+      appId: app.id,
+      provider: (process.env.NOTES_DB_PROVIDER ?? 'neon') as 'neon' | 'supabase' | 'turso',
+      label: 'notes',
+      connectionString: required('NOTES_DATABASE_URL'),
+    });
+    console.info('database attached from NOTES_DATABASE_URL');
+  }
+
   if (config === null) {
     console.error(
-      `app ${APP_SLUG} has no database attached yet — add one in the Dashboard, or let Phase 6 ` +
-        `provisioning create it, then run this again`,
+      `app ${APP_SLUG} has no database attached yet. Give it one of:\n` +
+        `  REUSE_DB_FROM=<slug>        share the database of an app that already has one\n` +
+        `  NOTES_DATABASE_URL=<dsn>    attach a tenant database directly\n` +
+        `or attach one in the Dashboard, then run this again.`,
     );
     process.exit(1);
   }
@@ -130,6 +190,49 @@ async function main(): Promise<void> {
       description: 'a person sees and edits only their own notes',
     });
     console.info(`policy ${TABLE}.${action} created`);
+  }
+
+  // ── 5. two demo people, with the role actually attached ───────────────────
+  //
+  // This step exists because of something only a real run revealed: signing in makes a person a
+  // member of the app (`infra_app_members`), but RBAC reads permissions from
+  // `infra_role_assignments`. Creating the `member` role above attaches it to nobody. So a person
+  // could sign in, hold a valid token, and still be told `role does not grant notes:create` —
+  // which is correct behaviour, and completely opaque from the outside.
+  //
+  // An admin doing this in the Dashboard would tick a box. Here the setup script does it, because
+  // "the example works after you also do an undocumented step" is not an example that works.
+  const people = [
+    { email: process.env.USER_A ?? 'alice@example.com', password: process.env.PASS_A ?? 'correct-horse-battery-7' },
+    { email: process.env.USER_B ?? 'bob@example.com', password: process.env.PASS_B ?? 'correct-horse-battery-9' },
+  ];
+
+  for (const person of people) {
+    let user = await findUserByEmail(db, person.email);
+
+    if (user === null) {
+      // The same sign-up the hub exposes over HTTP, called directly — no server needed to seed.
+      await auth().api.signUpEmail({
+        body: { email: person.email, password: person.password, name: person.email.split('@')[0] ?? 'demo' },
+      });
+      user = await findUserByEmail(db, person.email);
+    }
+
+    if (user === null) {
+      console.error(`could not create the demo account for ${person.email.slice(0, 2)}***`);
+      process.exit(1);
+    }
+
+    await addMember(db, app.id, user.id, 'member');
+    await assignRole(db, {
+      subjectType: 'user',
+      subjectId: user.id,
+      roleId: member.id,
+      scopeType: 'app',
+      scopeId: app.id,
+      grantedBy: app.ownerUserId,
+    });
+    console.info(`person ${person.email.slice(0, 2)}*** → role ${member.key} on ${app.slug}`);
   }
 
   await adapter.close();

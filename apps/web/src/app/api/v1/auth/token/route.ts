@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { auth, issueAccessToken, issueTokenPair } from '@infra/auth';
 import { InfraError } from '@infra/core';
-import { addMember, getMembership, recordAuditAsync } from '@infra/db';
+import { addMember, assignDefaultRole, getMembership, recordAuditAsync } from '@infra/db';
 import { stringField } from '@/lib/body-fields';
 import { db } from '@/lib/db';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
@@ -124,7 +124,33 @@ export async function POST(request: Request): Promise<Response> {
 
     // B2C: a user signing into an app for the first time becomes a member of that app.
     let membership = await getMembership(db(), caller.appId, userId);
+    const isNewMember = membership === null;
     membership ??= await addMember(db(), caller.appId, userId, 'member');
+
+    // Membership is not permission. `infra_app_members` records that a person belongs here;
+    // RBAC reads what they may do from `infra_role_assignments`, and nothing was writing to it.
+    // So a new account could sign in, hold a valid token, and be refused everything — correct
+    // behaviour, indistinguishable from a broken product.
+    //
+    // Granting the app's default role closes that. An app that wants the opposite — access only
+    // by invitation — clears `default_role_key` and this becomes a no-op. Idempotent either way,
+    // so a returning member costs one insert that does nothing; run only for new members so the
+    // common path does not pay for it at all.
+    if (isNewMember) {
+      const granted = await assignDefaultRole(db(), caller.appId, userId);
+      if (granted !== null) {
+        recordAuditAsync(db(), {
+          appId: caller.appId,
+          actorType: 'api_key',
+          actorId: caller.key.id,
+          action: 'access.role_assigned',
+          targetType: 'user',
+          targetId: userId,
+          ipAddress: clientIp(request),
+          meta: { role: granted, via: 'default_role', requestId },
+        });
+      }
+    }
 
     const sessionId = `sess_${randomUUID().replace(/-/g, '')}`;
     const pair = await issueTokenPair(

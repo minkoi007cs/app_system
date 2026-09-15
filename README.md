@@ -93,7 +93,7 @@ string, and there is no recovery path if it is lost. Then add `INFRA_MASTER_DATA
 Neon project and run:
 
 ```bash
-pnpm db:migrate     # 12 migrations, 31 tables
+pnpm db:migrate     # 14 migrations, 31 tables
 pnpm dev            # dashboard on http://localhost:3000
 ```
 
@@ -112,7 +112,7 @@ pnpm db:studio   # browse the Master DB
 
 ## Status
 
-All eight phases are implemented — **545 tests**, 6/6 packages building — and the platform has been
+All eight phases are implemented — **550 tests**, 6/6 packages building — and the platform has been
 exercised against live infrastructure rather than only against mocks. All twelve migrations are
 applied to the Neon Master DB (31 tables), and `scripts/live-proof.mjs` drives a real tenant
 database through the rules engine: eleven checks covering per-owner read isolation, a resource with
@@ -150,16 +150,33 @@ node scripts/live-proof.mjs   # 11 · policy enforced on real tenant data
 pnpm proof:auth           # 28 · sign-in, rotation, replay, family revocation, revoke
 pnpm proof:mfa            # 27 · TOTP enrolment, replay refusal, backup codes
 pnpm proof:ops            # 44 · impersonation guards, webhook SSRF, retry backoff, breaker
+pnpm proof:mail you@x     #  5 · a real email through the configured provider
 INFRA_TEST_DATABASE_URL=... pnpm test   # includes the integration suite
 ```
 
-Still never run for real, and named here so nobody mistakes the list above for coverage:
-passkey/WebAuthn (needs a real browser), the dashboard UI, `/api/v1/query` with an `sk_` key.
+`examples/notes-app` now runs too — 8 of 8 assertions, against a real Postgres over HTTP. It had
+never run before 2026-09-15: `setup.mts` imported a function that does not exist, so the import
+alone threw. `pnpm typecheck` did not cover `examples/`, which is why nobody found out. It does now.
 
-What remains before a v1.0 tag is operational, not architectural: a real mail provider for
-production (`INFRA_MAIL_PROVIDER=console` only prints the recovery link to a terminal), a backup
-restore drill, the maintenance cron installed on the target host, and Turso configured once. See
-the "v1.0 readiness" section of `process.md`, and `docs/runbooks.md` for the procedures.
+That run also corrected the example's architecture. A publishable key is capped at `db:read` and
+`auth:read` — it can never hold `db:write` — so the demo's writes were impossible by design. It
+now keeps two clients per person: reads go through the `pk_` key (the browser path advertised
+above), writes through the `sk_` key (the server path). **The key decides what class of operation
+is permitted; the access token decides whose rows.** The demo proves both: bob holding the `sk_`
+key, the most privileged credential the app has, still cannot write a row owned by alice.
+
+Still never run for real, and named here so nobody mistakes the list above for coverage:
+passkey/WebAuthn (needs a real browser), the dashboard UI, and Neon/Turso auto-provisioning
+(needs API keys — the code has never called either provider).
+
+Mail sends for real: a message went through Resend in 204ms on 2026-09-15. One honest caveat —
+with Resend's sandbox `from` address (`onboarding@resend.dev`) delivery only reaches the Resend
+account owner, so password recovery is correct but **not yet usable by real users**. Verifying a
+domain at resend.com/domains and changing `INFRA_MAIL_FROM` is what opens that up.
+
+What remains before a v1.0 tag is operational, not architectural: that domain verification, a
+backup restore drill, the maintenance cron installed on the target host, and Turso configured once.
+See the "v1.0 readiness" section of `process.md`, and `docs/runbooks.md` for the procedures.
 
 ## License
 

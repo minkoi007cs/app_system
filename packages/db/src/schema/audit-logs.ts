@@ -37,6 +37,8 @@ export const AUDIT_ACTIONS = [
   'access.granted',
   'access.denied',
   'access.decision.summary',
+  /** A role granted automatically when somebody joined an app — never invisible. */
+  'access.role_assigned',
   'role.assigned',
   'role.revoked',
   'policy.created',

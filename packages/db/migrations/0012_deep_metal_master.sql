@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "infra_ra_unique_grant" ON "infra_role_assignments" USING btree ("subject_type","subject_id","role_id","scope_type",coalesce("scope_id", ''));

@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.9.4** |
-| Current phase | **G1 đang đóng** — 5 đường đi chính đã chạy thật, 99 khẳng định trên Postgres thật |
+| Current version | **v1.0.0-rc.4** |
+| Current phase | **rc.4** — dọn đường build trước khi deploy Vercel |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
-| Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 40 test files, **545 tests** (core 383 · sdk 51 · adapters 50 · web 36 · db 21 · auth 4) |
-| Next task | **Resend** — Khoi đang lấy API key; rồi kiểm luồng khôi phục mật khẩu đầu-cuối. Còn: diễn tập restore, Turso |
+| Last build | `PASS` — 6/6 packages (turbo 2.10.12), `next build` sạch từ `.next` rỗng |
+| Last test | `PASS` — **550 tests** = 540 passed + 10 skipped khi không có database (core 383 · sdk 51 · adapters 50 · web 36 · db 16+10 · auth 4) |
+| Next task | **Khoi chạy `pnpm db:migrate`** (0012 + 0013) rồi notes-app trên Neon · verify domain Resend · restore · cron · Turso |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -184,7 +184,7 @@ Quy trình lẫn bài diễn tập đã viết sẵn. Thiếu đúng một thứ
 | # | Khoảng cách | Vì sao chặn | Ai làm được |
 |---|---|---|---|
 | ~~**G0-1**~~ | ~~Migration chưa apply~~ ✅ | **Kiểm chứng 2026-09-14** bằng `pnpm verify:live`: 31 bảng, 12 migration đã ghi nhận. Log ở `logs/verify-2026-09-14T05-52-52-018Z.log`. | xong |
-| **G0-2** | **Dev: xong. Production: chưa.** | `INFRA_MAIL_PROVIDER=console` đã đặt 2026-09-14 → luồng khôi phục chạy được ở dev. **Production vẫn cần một nhà cung cấp thật** (`resend` hoặc `webhook`) — `console` chỉ in ra log, không ai nhận được thư. | Khoi: chọn nhà cung cấp khi deploy |
+| ~~**G0-2**~~ | ~~Chưa có mail thật~~ ✅ | **2026-09-15: đã gửi thư thật qua Resend, 204ms** (`logs/mail-proof-*.log`). Còn một giới hạn: `onboarding@resend.dev` chỉ gửi tới chủ tài khoản Resend, nên **chưa dùng được cho người dùng ngoài** — cần verify domain ở resend.com/domains rồi đổi `INFRA_MAIL_FROM`. | xong (còn verify domain) |
 | ~~**G0-3**~~ | ~~Rate limit trong bộ nhớ tiến trình~~ ✅ | `infra_rate_limits` là bộ đếm dùng chung, một upsert mỗi lượt kiểm; lớp trong bộ nhớ **chỉ được từ chối, không được cho qua** (ADR-025). **Đóng ở v0.7.3 là quá sớm**: câu upsert ném lỗi mọi lần chạy và vì fail-open nên không ai thấy. Sửa + kiểm chứng trên Postgres thật ở v0.9.1. | xong |
 | ~~**G0-4**~~ | ~~Chưa chạy thật lần nào~~ ✅ | **2026-09-14: 11/11 phán quyết đúng trên Master DB thật + database Neon thật.** Log ở `logs/live-proof-2026-09-14T06-19-45-519Z.log`. | xong |
 
@@ -235,6 +235,267 @@ Quy trình lẫn bài diễn tập đã viết sẵn. Thiếu đúng một thứ
 ```
 
 ---
+
+### 2026-09-15 · v1.0.0-rc.4 · fix(web): hai lỗi build được báo — và nguyên nhân thật không phải như báo cáo nói
+
+Báo cáo audit nêu hai chỗ chặn `next build`. Đã sửa cả hai. Nhưng **không chỗ nào tái hiện được**
+trên Next 16.3.4, và điều đó quan trọng hơn bản thân hai dòng sửa.
+
+**1. `export const DELIVERY_RETENTION_DAYS` → `TS2344`**
+
+Triệu chứng có thật, cơ chế có thật: `route.ts` không phải module thường, Next kiểm danh sách
+export của nó và một export lạ là lỗi biên dịch. Nhưng lỗi được báo trỏ tới
+`.next/types/app/api/internal/maintenance/route.ts` — **layout của Next 15**, mỗi route một file.
+Next 16.3.4 sinh **một** file `.next/types/validator.ts`, và ràng buộc của nó
+(`RouteHandlerConfig`) cho phép export thừa. Build sạch ở đây, `tsc --noEmit` xanh, cả hai với
+dòng `export` còn nguyên.
+
+Nên nguyên nhân gần như chắc chắn là **`.next` cũ** (hoặc `node_modules` cài từ trước lần nâng
+Next) trên máy Khoi. `apps/web/tsconfig.json` include `.next/types/**/*.ts`, nên `tsc --noEmit`
+đọc luôn mấy file validator đời cũ còn sót. Sửa thật: `rm -rf apps/web/.next` rồi `pnpm install`.
+Bỏ `export` vẫn làm — nó vô dụng (không ai import), và bỏ đi thì code miễn nhiễm với cả hai đời
+checker.
+
+**2. `@libsql/darwin-arm64/index.node — Module parse failed`**
+
+`libsql` chọn binary theo nền tảng bằng `require(\`@libsql/${target}\`)`. Bundler đi theo lời gọi
+đó sẽ cố **parse một file nhị phân**. Nhánh nào vấp phụ thuộc vào máy: chỉ binary của nền tảng
+hiện tại được cài, nên cùng một repo build được trên Linux và hỏng trên Mac ARM.
+
+Nhưng Next 16.3.4 đã liệt kê sẵn `@libsql/client` và `libsql` trong
+`dist/lib/server-external-packages.jsonc`. Kiểm bằng thực nghiệm: đặt
+`serverExternalPackages: []` rồi build lại — **vẫn xanh**. Nghĩa là trên phiên bản này dòng thêm
+vào không thay đổi gì. Vẫn viết vào config, vì yêu cầu này thuộc về dự án chứ không thuộc về mặc
+định của Next đời sau.
+
+**Và điều đáng nói nhất: `darwin-arm64` không tồn tại trên Vercel.** Vercel build trên Linux x64.
+Đây là lỗi build máy local, không phải chỗ chặn deploy.
+
+**Deliverables**
+- Bỏ `export` ở `DELIVERY_RETENTION_DAYS`, kèm ghi chú vì sao một `route.ts` không được export thừa.
+- `serverExternalPackages: ['@libsql/client', 'libsql']` trong `apps/web/next.config.ts`.
+
+**Modified files**
+- `apps/web/src/app/api/internal/maintenance/route.ts` (edit)
+- `apps/web/next.config.ts` (edit)
+
+**Test status**
+- `pnpm build` → PASS — 6/6, `--force` (không cache), `.next` xoá sạch trước khi chạy
+- `pnpm test`  → PASS — 540 passed + 10 skipped (550)
+- `pnpm typecheck` → PASS — 12/12
+
+**Một con số tôi đã nói sai**
+
+Tôi từng ghi "không có database thì 545 passed + 5 skipped". Sai. Bộ integration đã lên **10**
+test từ lúc thêm nhóm default-role ở rc.3; con số đúng là **540 + 10**. Báo cáo của Khoi đúng, tôi
+sai — và tôi sai vì nhắc lại một con số cũ thay vì đếm lại.
+
+**Next task** → Khoi: `rm -rf apps/web/.next` → `pnpm install && pnpm build` để xác nhận hai lỗi
+biến mất → `pnpm db:migrate` (0012 + 0013) → commit & push.
+
+---
+
+### 2026-09-15 · v1.0.0-rc.3 · feat(access): role mặc định theo app — "thành viên" không phải là "có quyền"
+
+Khoi chọn hướng **Default Role per App**, mặc định `'member'`, `null` để tắt cho luồng B2B. Làm
+đủ ba phần, kèm một chỗ trong lập luận cần chỉnh.
+
+**Vấn đề, nói cho chính xác**
+
+`infra_app_members` ghi nhận một người **thuộc về** app này. RBAC đọc họ **được làm gì** từ
+`infra_role_assignments`. Không có gì ghi vào bảng thứ hai. Nên người mới: đăng nhập được, cầm
+token hợp lệ, là thành viên hợp lệ, và bị từ chối mọi thao tác. Hành vi đúng theo mặc-định-từ-chối,
+và từ bên ngoài không phân biệt được với một sản phẩm hỏng.
+
+**Deliverables**
+- `infra_apps.default_role_key` (migration **0013**), mặc định `'member'`. Một cột phục vụ hai
+  hình thái sản phẩm: B2C dùng được ngay sau khi đăng ký; B2B đặt `null` và access chỉ đến từ lời mời.
+- `assignDefaultRole(db, appId, userId)` — gọi ở đường đăng nhập, **chỉ cho thành viên mới**.
+- `setDefaultRole(db, appId, roleKey | null)` — kiểm role có tồn tại và thuộc app.
+- `/api/v1/auth/token` gọi nó sau `addMember`, và ghi audit `access.role_assigned`. Việc tự gán
+  quyền không bao giờ được vô hình.
+- Thông báo lỗi mới khi tài khoản **chưa có role nào**.
+
+**Chỗ cần chỉnh trong lập luận "ABAC phía sau nên tự gán hoàn toàn an toàn"**
+
+Đúng một nửa, và nửa còn lại đáng tiền. **ABAC quyết định chạm *dòng nào*; RBAC quyết định làm
+*thao tác gì*.** Một role mặc định mang `notes:delete` thì an toàn — người ta chỉ xoá được dòng
+của chính mình, vì policy lo phần đó. Một role mặc định mang `*` thì không, và không phải vì dữ
+liệu bị lộ: tài nguyên không có policy vẫn biên dịch thành `1 = 0`. Mà vì lúc đó **quyền không còn
+là thứ giữ hàng rào** — cái giữ là sự vắng mặt của một policy, và đó là một thứ rất dễ vô tình
+thêm vào sau này.
+
+Nên `setDefaultRole` **từ chối** role mang `*`, `*:*`, `admin`, `admin:*`. Bán kính của một lần gõ
+nhầm ở đây là mọi tài khoản từng đăng ký, kể cả những tài khoản tạo ra sau khi người gõ nhầm đã
+quên chuyện đó (ADR-033).
+
+**Fail open, có chủ đích, và nói rõ vì sao**
+
+`assignDefaultRole` bỏ qua im lặng ở mọi nhánh hỏng: app không tìm thấy, `default_role_key` rỗng,
+key trỏ tới một role đã bị xoá. Nó **cấp tiện lợi, không cấp quyền truy cập**. Đăng nhập không được
+hỏng vì ai đó đổi tên một role, và hậu quả của việc bỏ qua là người dùng không có quyền nào — đúng
+hướng an toàn. Quyết định uỷ quyền thật vẫn fail closed, sau đó, ở `checkAccess`.
+
+**Thông báo lỗi: hai tình huống khác nhau đang mặc chung một câu**
+
+`role does not grant notes:create` đẩy người ta đi xem danh sách quyền của role. Nhưng nếu tài
+khoản **không có role nào**, đó là một lỗi khác với cách sửa khác — và đó chính là tình huống một
+tài khoản mới gặp. Câu mới nói thẳng điều đó và nói luôn hai cách sửa. Nó không lộ thêm gì: người
+gọi vốn đã biết yêu cầu bị từ chối, và cả hai câu đều nói cùng một điều về dữ liệu, tức là không gì cả.
+
+**BẰNG CHỨNG — chạy thật cả hai nhánh**
+
+Xoá sạch `infra_role_assignments` và `infra_app_members`, rồi chạy `demo.mts` **không** chạy setup
+gán role trước:
+
+```
+default_role_key = 'member'  → 8/8 xanh · assignments=2 · audit access.role_assigned=2
+default_role_key = NULL      → từ chối, với câu: "this account has no role on this
+                                application ... an administrator must grant one, or the
+                                application can set a default role" · assignments=0
+```
+
+**Test** — +5 test tích hợp trên Postgres thật (**550 passed**), gồm: gán một lần rồi idempotent ·
+`null` không gán gì · key trỏ role đã xoá thì bỏ qua · từ chối role wildcard · từ chối role không
+thuộc app. Kiểm ngược: bỏ danh sách `UNSAFE_FOR_DEFAULT` → test wildcard đỏ.
+
+`pnpm build` 6/6 · `pnpm typecheck` 12/12 · `db:generate` không drift.
+
+**Next task** → Khoi apply **0012 + 0013** lên Neon, rồi chạy notes-app trên Neon thật.
+
+### 2026-09-15 · v1.0.0-rc.2 · fix(examples): "app con trong 9 dòng" — lời hứa lớn nhất, chưa từng chạy
+
+Một báo cáo thẩm định liệt kê `examples/notes-app` như **bằng chứng** cho lời hứa ở đầu README.
+Nó không phải bằng chứng. Nó chưa từng chạy, và không thể chạy: `setup.mts` import `registerApp`,
+một hàm **không tồn tại** trong `@infra/db`. Riêng dòng import đó đã ném lỗi.
+
+Lý do nó sống sót: `pnpm typecheck` **không phủ `examples/`**. Ví dụ duy nhất của dự án nằm ngoài
+cổng kiểm duy nhất bắt được loại lỗi đó.
+
+**Bảy lỗi, tìm ra bằng cách chạy từng bước**
+
+| # | Lỗi | Vì sao không ai thấy |
+|---|---|---|
+| 1 | `registerApp` không tồn tại | `examples/` ngoài phạm vi typecheck |
+| 2 | `createApp` nhận `createdBy`, nhưng dòng cần `ownerUserId` | như trên |
+| 3 | demo đọc `data.access_token`; API trả `data.accessToken` | token thành `''`, mọi request đi ra không xác thực |
+| 4 | demo chèn `owner_id: 'ALICE_ID'` — chuỗi giữ chỗ | policy đòi `owner_id = subject.id` nên **cả hai** insert đều bị từ chối; comment thì mô tả một hàng rào bắt hàng giả, trong khi **mọi** hàng đều giả |
+| 5 | demo giả định alice/bob đã tồn tại với mật khẩu chưa ai đặt | — |
+| 6 | Better Auth từ chối sign-up không có header `Origin` | chỉ hiện ra khi gọi từ script, không phải từ trình duyệt |
+| 7 | **Người dùng đăng nhập không được gán role** | `infra_app_members` là thành viên app; RBAC đọc quyền từ `infra_role_assignments`. Tạo role `member` không gắn nó cho ai. Kết quả: `role does not grant notes:create` — đúng hành vi, và hoàn toàn mờ mịt từ bên ngoài |
+
+**Lỗi thứ tám, và là lỗi kiến trúc: demo ghi bằng khoá `pk_`**
+
+`PUBLISHABLE_ALLOWED_SCOPES` chặn khoá publishable ở `db:read` + `auth:read`, *"whatever an admin
+ticks in the UI"*. Một khoá `pk_` **không bao giờ** có `db:write`. Demo cũ ghi bằng nó, nên demo cũ
+minh hoạ một kiến trúc không tồn tại.
+
+Nay demo giữ **hai client mỗi người**: `read` mang khoá `pk_` (đường trình duyệt mà README quảng
+cáo), `write` mang khoá `sk_` (đường server). Cả hai mang cùng access token. **Khoá quyết định
+*loại thao tác*; token quyết định *hàng của ai*.** Không cái nào thay được cái kia — và demo giờ
+chứng minh điều đó: bob dùng khoá `sk_`, credential mạnh nhất app có, vẫn **không** ghi được hàng
+mang tên alice.
+
+**Lỗi thứ chín, trong database, tìm ra khi chạy setup lần thứ hai**
+
+`assignRole` không có ràng buộc duy nhất → chạy setup hai lần thì `infra_role_assignments` nhân đôi.
+Không có gì hỏng nhìn thấy được: `effectivePermissions` hợp nhất chúng và trả cùng một câu trả lời.
+Bảng chỉ lặng lẽ phình ra, cho tới ngày ai đó soát "ai có quyền gì" và đọc một danh sách trong đó
+một người xuất hiện bốn lần mà không biết điều đó có nghĩa gì.
+
+Sửa ở tầng database vì **chỉ database mới cưỡng chế được** — hai lời mời đồng thời cùng một người
+đều thấy "chưa gán" và đều chèn. Migration **0012**: unique index trên
+`coalesce(scope_id, '')`. `coalesce` là phần chịu lực: `scope_id` null cho grant phạm vi platform,
+Postgres coi null là khác biệt trong unique index, nên một unique index thường sẽ khử trùng lặp
+grant theo app và để grant theo platform nhân đôi tự do — đúng loại grant quan trọng nhất.
+
+**BẰNG CHỨNG — 8/8 khẳng định, trên Postgres thật, qua HTTP thật**
+
+```
+OK  alice ghi được hàng của mình          OK  bob ghi được hàng của mình
+OK  bob KHÔNG ghi được hàng của alice, kể cả bằng sk_
+OK  pk_ hoàn toàn không insert được       OK  alice chỉ thấy hàng của alice
+OK  bob chỉ thấy hàng của bob             OK  bob đòi hàng của alice → rỗng
+OK  pk_ bị từ chối ở /api/v1/query
+```
+
+Không truy vấn nào trong demo nhắc tới `owner_id` như một bộ lọc. Điều kiện đến từ hub.
+
+**Hai khẳng định của chính mình sai** — cùng bệnh với những lần trước: `Result<T>` trả `error: null`
+khi thành công, mình so với `undefined`, nên test đỏ trong khi lệnh ghi đã chạy đúng. Một test đỏ
+sai lý do tốn đúng bằng một test xanh sai lý do; chỉ là tốn sớm hơn.
+
+**Hàng rào**
+- `examples/notes-app/tsconfig.json` + script `typecheck` → `pnpm typecheck` nay phủ 12 task thay
+  vì 11. Lỗi #1 và #2 sẽ không quay lại.
+- `packages/db/src/queries/lifecycle.ts` — thêm `findUserByEmail`, so sánh **không phân biệt hoa
+  thường** (cùng một hộp thư không được thành hai tài khoản).
+
+**Test status** — build 6/6 · typecheck 12/12 · test **545 passed** · `db:generate` không drift.
+
+**CẦN KHOI LÀM**: migration 0012 chưa apply lên Neon. Chạy `pnpm db:migrate` trước khi chạy
+notes-app trên Neon.
+
+**Câu hỏi thiết kế còn mở** (chưa tự quyết): lần đăng nhập đầu tiên có nên **tự gán một role mặc
+định** không? Hiện tại người dùng mới thành member của app nhưng không có quyền nào, và thông báo
+`role does not grant …` không nói cho họ biết điều đó. Với B2C thì đây gần như chắc chắn là thứ
+cần; với B2B thì mời-rồi-gán mới đúng. Cần Khoi chọn.
+
+**Next task** → Khoi apply 0012 lên Neon, rồi chạy notes-app trên Neon thật.
+
+### 2026-09-15 · v1.0.0-rc.1 · feat(mail): gửi thật thành công — G0-2 đóng, mảnh cuối chặn v1.0
+
+**Kết quả**
+
+```
+OK  transport được chọn theo INFRA_MAIL_PROVIDER: "resend"
+OK  thiếu INFRA_MAIL_FROM thì từ chối TRƯỚC khi gọi mạng
+OK  gửi thật qua Resend thành công — 204ms
+```
+
+`scripts/mail-proof.mjs` chạy **trên máy Khoi**, không phải trong sandbox: khoá API không rời khỏi
+`.env.local`. Nó dùng đúng `createMailTransport` mà runtime dùng — không phải một lệnh gọi HTTP viết
+lại, vì nếu hai thứ đó khác nhau thì bằng chứng vô giá trị.
+
+**Một tình huống đáng ghi: kỷ luật bảo mật làm mất khả năng chẩn đoán**
+
+Lần gửi đầu trả **403** và không ai biết vì sao. Nguyên nhân: `mailer.ts` cố tình **không** giữ body
+lỗi của provider — body đó có thể trích dẫn lại lá thư nó vừa nhận, kể cả địa chỉ người nhận, và
+thứ đó không được lọt vào một `InfraError` có thể bị log. Quyết định ấy đúng (ADR-026). Nhưng hệ quả
+là "không gửi được, không biết vì sao", và đó là trạng thái tệ nhất để dừng lại.
+
+Cách giải: **giữ nguyên kỷ luật ở production, đặt công cụ chẩn đoán ở script.** `mail-proof.mjs`
+gọi lại một lần và đọc lời giải thích của provider, **sau khi che mọi địa chỉ email** trong đó
+(`maskEmail` áp lên từng địa chỉ tìm thấy). Đủ để biết tài khoản nào, không đủ để thu hoạch địa chỉ
+từ log. Lời giải thích hiện ra ngay:
+
+> *"You can only send testing emails to your own email address (m***@gmail.com)"*
+
+Tức là 403 không phải lỗi cấu hình — `onboarding@resend.dev` là hộp cát của Resend và chỉ gửi được
+tới email chủ tài khoản. Gửi lại đúng địa chỉ đó: thành công.
+
+**Deliverables**
+- `scripts/mail-proof.mjs` (new) — 5 khẳng định + bước chẩn đoán khi thất bại. Che địa chỉ trong
+  mọi dòng log, kể cả output của provider.
+- `package.json` — `proof:mail`.
+
+**Giới hạn còn lại, nói rõ để không nhầm với "xong"**
+
+`INFRA_MAIL_FROM=onboarding@resend.dev` **chỉ gửi được tới chủ tài khoản Resend**. Nghĩa là luồng
+khôi phục mật khẩu hiện chạy đúng về mặt kỹ thuật nhưng **chưa dùng được cho người dùng thật** —
+một người lạ bấm quên mật khẩu sẽ không nhận được gì. Để mở ra cần **verify một domain** ở
+`resend.com/domains` rồi đổi `INFRA_MAIL_FROM` sang địa chỉ thuộc domain đó. Đó là việc của Khoi và
+là việc cuối trước khi mở cho người dùng ngoài.
+
+**Ghi chú an toàn**
+
+Trong lúc dựng phần này, một khoá API Resend bị dán vào chat. Khoá đó đã được **thu hồi và thay**,
+và kiểm chứng bằng cách grep `.env.local`: khoá cũ không còn, khoá mới đúng hình dạng `re_` + 33 ký
+tự, mỗi biến mail xuất hiện **đúng một lần** trong file (quan trọng: Next.js dùng dotenv nên dòng
+cuối thắng, còn script của dự án bỏ qua khoá đã đặt nên dòng đầu thắng — hai dòng trùng tên thì app
+và script đọc ra hai giá trị khác nhau).
+
+**Next task** → verify domain Resend · diễn tập restore · cài cron · Turso.
 
 ### 2026-09-15 · v0.9.4 · test(proof): ba đường đi nữa chạy thật, và dọn nợ tên trường API
 

@@ -85,6 +85,20 @@
       "when": 1789363047473,
       "tag": "0011_brown_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789457163597,
+      "tag": "0012_deep_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789490464366,
+      "tag": "0013_grey_stranger",
+      "breakpoints": true
     }
   ]
 }

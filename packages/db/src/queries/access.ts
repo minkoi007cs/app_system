@@ -11,6 +11,7 @@ import {
   type ScopeType,
   type SubjectType,
 } from '../schema/access.js';
+import { infraApps } from '../schema/apps.js';
 
 // ── roles ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,17 @@ export interface AssignRoleInput {
   grantedBy: string;
 }
 
+/**
+ * Grants a role. Assigning the same grant twice is a no-op, not a second row.
+ *
+ * `onConflictDoNothing` rather than a read-then-insert: only the database can actually enforce
+ * this (see `infra_ra_unique_grant`). Two concurrent invitations of the same person would both see "not assigned yet" and both
+ * insert — the same race the rate-limit counter avoids by never asking first.
+ *
+ * `expiresAt` is deliberately left alone on conflict. Re-running a setup script must not silently
+ * extend somebody's temporary access; changing an expiry is a decision, and it belongs in a call
+ * that says so.
+ */
 export async function assignRole(db: MasterDatabase, input: AssignRoleInput): Promise<void> {
   await db.insert(infraRoleAssignments).values({
     subjectType: input.subjectType,
@@ -70,7 +82,13 @@ export async function assignRole(db: MasterDatabase, input: AssignRoleInput): Pr
     scopeId: input.scopeId ?? null,
     expiresAt: input.expiresAt ?? null,
     grantedBy: input.grantedBy,
-  });
+  // No conflict target: the unique index is on an EXPRESSION (`coalesce(scope_id, '')`), and a
+  // plain column list does not match it, so Postgres cannot infer the arbiter and rejects the
+  // statement outright — `there is no unique or exclusion constraint matching the ON CONFLICT
+  // specification`. A bare `do nothing` covers any unique violation on the table, which here is
+  // exactly the one we mean. The only other unique key is the primary key, and that is a fresh
+  // uuid on every call.
+  }).onConflictDoNothing();
 }
 
 export async function revokeRoleAssignment(db: MasterDatabase, assignmentId: string): Promise<void> {
@@ -224,4 +242,105 @@ export async function setPolicyEnabled(db: MasterDatabase, policyId: string, ena
 
 export async function deletePolicy(db: MasterDatabase, policyId: string): Promise<void> {
   await db.delete(infraPolicies).where(eq(infraPolicies.id, policyId));
+}
+
+/** A default role may not contain these: they would be handed to every new signup. */
+const UNSAFE_FOR_DEFAULT = ['*', '*:*', 'admin', 'admin:*'];
+
+/**
+ * Sets (or clears, with `null`) the role granted automatically when somebody joins this app.
+ *
+ * Refuses a role carrying wildcard or admin permissions. Auto-assignment is a convenience, and a
+ * convenience that can hand out `*` is not one — the blast radius of a typo here is every account
+ * that ever signs up, including ones created after whoever made the typo has forgotten.
+ *
+ * This is the part of the design that the reasoning "ABAC protects us anyway" does not cover.
+ * ABAC decides **which rows** a person may touch; RBAC decides **which operations** they may
+ * perform at all. A default role holding `notes:delete` is fine — they can only delete their own
+ * rows. A default role holding `*` is not, because ABAC has nothing to say about a resource that
+ * carries no policy: the gateway compiles `1 = 0` and refuses, which protects the data but means
+ * the permission was never the thing holding the line. Keep the default role narrow on purpose.
+ */
+export async function setDefaultRole(
+  db: MasterDatabase,
+  appId: string,
+  roleKey: string | null,
+): Promise<void> {
+  if (roleKey !== null) {
+    const [role] = await db
+      .select()
+      .from(infraRoles)
+      .where(and(eq(infraRoles.appId, appId), eq(infraRoles.key, roleKey)))
+      .limit(1);
+
+    if (role === undefined) {
+      throw new InfraError('VALIDATION_FAILED', `no role "${roleKey}" on this app`, {
+        details: { roleKey },
+      });
+    }
+
+    const unsafe = role.permissions.filter((permission) =>
+      UNSAFE_FOR_DEFAULT.includes(permission.trim().toLowerCase()),
+    );
+    if (unsafe.length > 0) {
+      throw new InfraError(
+        'VALIDATION_FAILED',
+        `"${roleKey}" carries ${unsafe.join(', ')} and cannot be a default role`,
+        { details: { roleKey, unsafe } },
+      );
+    }
+  }
+
+  await db
+    .update(infraApps)
+    .set({ defaultRoleKey: roleKey, updatedAt: new Date() })
+    .where(eq(infraApps.id, appId));
+}
+
+/**
+ * Grants the app's default role to somebody who just joined. Returns the role key granted, or null.
+ *
+ * Called on the path where a person becomes a member of an app. Everything about it fails **open**
+ * — a missing app, a cleared `default_role_key`, a key naming a role that no longer exists — and
+ * that is deliberate in a way worth stating: this grants convenience, not access. Signing in must
+ * not break because somebody renamed a role, and the outcome of skipping is that the person has no
+ * permissions, which is the safe direction. The authorisation decision itself still fails closed,
+ * later, in `checkAccess`.
+ *
+ * Idempotent through `assignRole`'s unique index, so the ordinary case — a returning member — costs
+ * one insert that does nothing.
+ */
+export async function assignDefaultRole(
+  db: MasterDatabase,
+  appId: string,
+  userId: string,
+): Promise<string | null> {
+  const [app] = await db
+    .select({ defaultRoleKey: infraApps.defaultRoleKey })
+    .from(infraApps)
+    .where(eq(infraApps.id, appId))
+    .limit(1);
+
+  const roleKey = app?.defaultRoleKey ?? null;
+  if (roleKey === null || roleKey === '') return null;
+
+  const [role] = await db
+    .select({ id: infraRoles.id })
+    .from(infraRoles)
+    .where(and(eq(infraRoles.appId, appId), eq(infraRoles.key, roleKey)))
+    .limit(1);
+
+  // A key naming a role nobody created is a configuration mistake, not a reason to refuse a login.
+  if (role === undefined) return null;
+
+  await assignRole(db, {
+    subjectType: 'user',
+    subjectId: userId,
+    roleId: role.id,
+    scopeType: 'app',
+    scopeId: appId,
+    grantedBy: 'default-role',
+  });
+
+  return roleKey;
 }

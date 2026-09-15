@@ -27,9 +27,11 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { masterDb, type MasterDatabase } from '../src/client.js';
+import { assignDefaultRole, createRole, setDefaultRole } from '../src/queries/access.js';
 import { consumeShared, sweepRateLimits } from '../src/queries/rate-limits.js';
 import { expireImpersonations } from '../src/queries/impersonation.js';
 import { infraImpersonationSessions } from '../src/schema/impersonation.js';
+import { effectivePermissions } from '../src/queries/access.js';
 import { infraApps } from '../src/schema/apps.js';
 import { user } from '../src/schema/auth.js';
 import { eq } from 'drizzle-orm';
@@ -97,6 +99,67 @@ describe.skipIf(!enabled)('integration · Postgres thật', () => {
       await consumeShared(db, identity, 5, 1_000, new Date(Date.now() - 60_000));
       const removed = await sweepRateLimits(db, new Date());
       expect(removed).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('default role on join', () => {
+    /** A fresh app + user pair, cleaned up by the afterAll above. */
+    async function freshApp(permissions: string[]) {
+      const userId = `itest-${randomUUID()}`;
+      await db.insert(user).values({ id: userId, name: 'Default Role', email: `${userId}@test.invalid` });
+      madeUsers.push(userId);
+
+      const [app] = await db
+        .insert(infraApps)
+        .values({ slug: `itest-${randomUUID().slice(0, 8)}`, name: 'Default Role', ownerUserId: userId })
+        .returning({ id: infraApps.id });
+      if (app === undefined) throw new Error('app insert returned nothing');
+      madeApps.push(app.id);
+
+      await createRole(db, { appId: app.id, key: 'member', name: 'Member', permissions });
+      return { appId: app.id, userId };
+    }
+
+    it('gán role mặc định cho người mới, và chỉ một lần', async () => {
+      const { appId, userId } = await freshApp(['notes:read', 'notes:create']);
+
+      expect(await assignDefaultRole(db, appId, userId)).toBe('member');
+      // Idempotent: cùng một grant lần hai không tạo dòng thứ hai (unique index 0012).
+      expect(await assignDefaultRole(db, appId, userId)).toBe('member');
+
+      const { permissions, roleKeys } = await effectivePermissions(db, 'user', userId, appId);
+      expect(roleKeys).toEqual(['member']);
+      expect(permissions).toContain('notes:create');
+    });
+
+    it('KHÔNG gán gì khi default_role_key là null — đó là luồng B2B', async () => {
+      const { appId, userId } = await freshApp(['notes:read']);
+      await setDefaultRole(db, appId, null);
+
+      expect(await assignDefaultRole(db, appId, userId)).toBeNull();
+      const { roleKeys } = await effectivePermissions(db, 'user', userId, appId);
+      expect(roleKeys).toEqual([]);
+    });
+
+    it('key trỏ tới role không tồn tại thì bỏ qua, KHÔNG làm hỏng đăng nhập', async () => {
+      const { appId, userId } = await freshApp(['notes:read']);
+      // Đi vòng qua setDefaultRole để mô phỏng một role đã bị xoá sau khi cấu hình.
+      await db.update(infraApps).set({ defaultRoleKey: 'ghost' }).where(eq(infraApps.id, appId));
+
+      expect(await assignDefaultRole(db, appId, userId)).toBeNull();
+    });
+
+    it('từ chối một role mặc định mang quyền wildcard', async () => {
+      // Đây là điều mà "đã có ABAC phía sau nên an toàn" KHÔNG che được: ABAC quyết định được
+      // chạm dòng nào, RBAC quyết định được làm thao tác gì. Một role mặc định mang `*` trao
+      // thao tác cho mọi tài khoản đăng ký, mãi mãi.
+      const { appId } = await freshApp(['*']);
+      await expect(setDefaultRole(db, appId, 'member')).rejects.toThrowError(/cannot be a default role/);
+    });
+
+    it('từ chối một role không thuộc app này', async () => {
+      const { appId } = await freshApp(['notes:read']);
+      await expect(setDefaultRole(db, appId, 'no-such-role')).rejects.toThrowError(/no role/);
     });
   });
 

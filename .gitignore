@@ -13,3 +13,9 @@ coverage
 !.secrets/*.example
 logs/
 .neon
+
+# Backup cua .env.local — KHONG bao gio duoc theo doi (da tung lot mot lan)
+.env.local.bak*
+*.env.bak
+*.tgz
+

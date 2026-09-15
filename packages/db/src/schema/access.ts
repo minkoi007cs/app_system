@@ -5,6 +5,7 @@
  * role within a scope. Policies carry the row-level conditions the gateway appends to queries.
  */
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type { PolicyAction, PolicyCondition, PolicyEffect } from '@infra/core';
 import { infraApps } from './apps.js';
 
@@ -45,6 +46,27 @@ export const infraRoleAssignments = pgTable(
   (t) => [
     index('infra_ra_subject_idx').on(t.subjectType, t.subjectId),
     index('infra_ra_scope_idx').on(t.scopeType, t.scopeId),
+    /**
+     * The same grant, twice, is not a second grant.
+     *
+     * Without this, re-running any setup or re-inviting anyone silently doubles their rows.
+     * Nothing breaks visibly — `effectivePermissions` unions them and returns the same answer —
+     * so the table just grows, and the day someone audits "who has access to what" they read a
+     * list where one person appears four times and cannot tell whether that means anything.
+     *
+     * `coalesce(scope_id, '')` is the load-bearing part: `scope_id` is null for platform-wide
+     * grants, and Postgres treats nulls as distinct in a unique index, so a plain unique index
+     * would deduplicate app-scoped grants and leave platform-scoped ones duplicating freely —
+     * exactly the grants that matter most. (`nulls not distinct` would say this more directly;
+     * drizzle-orm 0.45 has no builder for it, and an expression index is portable anyway.)
+     */
+    uniqueIndex('infra_ra_unique_grant').on(
+      t.subjectType,
+      t.subjectId,
+      t.roleId,
+      t.scopeType,
+      sql`coalesce(${t.scopeId}, '')`,
+    ),
   ],
 );
 

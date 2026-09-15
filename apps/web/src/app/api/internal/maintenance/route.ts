@@ -24,8 +24,17 @@ import { jsonOk, newRequestId, toErrorResponse } from '@/lib/response';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Delivered and dropped webhook rows older than this carry no information worth the storage. */
-export const DELIVERY_RETENTION_DAYS = 14;
+/**
+ * Delivered and dropped webhook rows older than this carry no information worth the storage.
+ *
+ * Deliberately **not** exported. A `route.ts` is not an ordinary module: Next validates its export
+ * list against a fixed set of handler names and known config keys, and an extra export is a build
+ * error on some versions of that check (`TS2344`, pointing at a generated file in `.next/types`
+ * rather than at this line, which is what makes it confusing to diagnose). Next 16.3.4 tolerates
+ * it; earlier majors did not. Nothing outside this file reads the constant, so there is no reason
+ * to spend the compatibility.
+ */
+const DELIVERY_RETENTION_DAYS = 14;
 
 async function run(job: string, work: () => Promise<number>): Promise<JobResult> {
   try {

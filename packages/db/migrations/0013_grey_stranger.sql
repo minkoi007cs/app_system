@@ -1,0 +1,1 @@
+ALTER TABLE "infra_apps" ADD COLUMN "default_role_key" varchar(64) DEFAULT 'member';

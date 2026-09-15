@@ -24,7 +24,8 @@
     "drill:verify": "node scripts/drill-verify.mjs",
     "proof:auth": "node scripts/auth-proof.mjs",
     "proof:mfa": "node scripts/mfa-proof.mjs",
-    "proof:ops": "node scripts/ops-proof.mjs"
+    "proof:ops": "node scripts/ops-proof.mjs",
+    "proof:mail": "node scripts/mail-proof.mjs"
   },
   "devDependencies": {
     "@infra/adapters": "workspace:^",

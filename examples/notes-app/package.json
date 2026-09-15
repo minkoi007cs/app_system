@@ -5,15 +5,18 @@
   "type": "module",
   "scripts": {
     "setup": "tsx setup.mts",
-    "demo": "tsx demo.mts"
+    "demo": "tsx demo.mts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@infra/adapters": "workspace:*",
     "@infra/core": "workspace:*",
     "@infra/db": "workspace:*",
-    "@infra/sdk": "workspace:*"
+    "@infra/sdk": "workspace:*",
+    "@infra/auth": "workspace:*"
   },
   "devDependencies": {
-    "tsx": "^4.23.13"
+    "tsx": "^4.23.13",
+    "@types/node": "^22.10.2"
   }
 }

@@ -5,7 +5,7 @@
  * to stop working — sessions, refresh tokens, role grants, remembered devices. A "disabled" flag
  * that leaves a live refresh token behind is not offboarding, it is a false sense of one.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   DEFAULT_INVITATION_TTL_HOURS,
   generateInvitationToken,
@@ -285,4 +285,28 @@ export async function listLifecycle(db: MasterDatabase): Promise<Array<InfraUser
     })
     .from(infraUserLifecycle)
     .innerJoin(user, eq(infraUserLifecycle.userId, user.id));
+}
+
+/**
+ * Finds a person by email, case-insensitively.
+ *
+ * Case-insensitive because an email address is: `Alice@Example.com` and `alice@example.com` are
+ * the same mailbox, and a lookup that misses on capitalisation would quietly create a second
+ * account for the same person — the kind of duplicate nobody notices until two of them have data.
+ *
+ * Lives here rather than in a script because every Drizzle query in this project lives in
+ * `@infra/db` (ADR-009). Returns null rather than throwing: "no such person" is an ordinary
+ * answer, not an error.
+ */
+export async function findUserByEmail(
+  db: MasterDatabase,
+  email: string,
+): Promise<{ id: string; email: string; name: string } | null> {
+  const [row] = await db
+    .select({ id: user.id, email: user.email, name: user.name })
+    .from(user)
+    .where(sql`lower(${user.email}) = lower(${email})`)
+    .limit(1);
+
+  return row ?? null;
 }

@@ -81,6 +81,20 @@ export async function checkAccess(db: MasterDatabase, request: AccessRequest): P
 
   const required = `${request.resource}:${ACTION_TO_PERMISSION[request.action]}`;
   if (!hasPermission(permissions, required)) {
+    // Two different situations wear the same denial, and telling them apart is most of the
+    // debugging. "Your role does not grant this" sends somebody to look at the role's permission
+    // list. "You have no role at all" sends them somewhere else entirely — to whether the account
+    // was ever granted anything, which is a different bug with a different fix. The old message
+    // said the first thing in both cases, and the second case is the one a new account hits.
+    //
+    // This does not leak anything a caller cannot already infer: they know the request was
+    // refused, and both messages say the same thing about the data, which is nothing.
+    const reason =
+      roleKeys.length === 0
+        ? `this account has no role on this application, so it cannot ${request.action} ${request.resource}` +
+          ` — an administrator must grant one, or the application can set a default role`
+        : `role does not grant ${required}`;
+
     recordAuditAsync(db, {
       appId: request.appId,
       actorType: request.subjectType === 'user' ? 'admin' : 'api_key',
@@ -88,9 +102,9 @@ export async function checkAccess(db: MasterDatabase, request: AccessRequest): P
       action: 'access.denied',
       outcome: 'failure',
       targetType: request.resource,
-      meta: { layer: 'rbac', required, roles: roleKeys },
+      meta: { layer: 'rbac', required, roles: roleKeys, noRoles: roleKeys.length === 0 },
     });
-    return denied('rbac', `role does not grant ${required}`, { roles: roleKeys, permissions });
+    return denied('rbac', reason, { roles: roleKeys, permissions });
   }
 
   const subject: PolicySubject = {
