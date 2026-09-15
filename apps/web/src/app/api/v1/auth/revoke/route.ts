@@ -12,17 +12,11 @@ import { db } from '@/lib/db';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { clientIp, requireApiKey } from '@/lib/guard';
 import { tokenIssuer } from '@/lib/issuer';
+import { booleanField, stringField } from '@/lib/body-fields';
 import { jsonOk, newRequestId, toErrorResponse } from '@/lib/response';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-interface RevokeBody {
-  refreshToken?: unknown;
-  sessionId?: unknown;
-  allSessions?: unknown;
-  accessToken?: unknown;
-}
 
 export async function OPTIONS(request: Request): Promise<Response> {
   return preflightResponse(request.headers.get('origin'), [request.headers.get('origin') ?? '']);
@@ -35,21 +29,23 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const caller = await requireApiKey(request, 'auth:read');
     const cors = corsHeaders(origin, caller.app.allowedOrigins);
-    const body = (await request.json().catch(() => ({}))) as RevokeBody;
+    // Mọi trường nhận cả camelCase và snake_case — xem lib/body-fields.
+    const body: unknown = await request.json().catch(() => ({}));
+    const refreshToken = stringField(body, 'refreshToken');
+    const sessionId = stringField(body, 'sessionId');
 
     let revoked = 0;
 
-    if (typeof body.refreshToken === 'string' && body.refreshToken !== '') {
+    if (refreshToken !== null) {
       // Looked up by hash — the raw value is never compared or logged.
-      const match = await findRefreshTokenByHash(db(), body.refreshToken);
+      const match = await findRefreshTokenByHash(db(), refreshToken);
       revoked = match === null ? 0 : await revokeSession(db(), match.sessionId, 'logout');
-    } else if (typeof body.sessionId === 'string' && body.sessionId !== '') {
-      revoked = await revokeSession(db(), body.sessionId, 'logout');
-    } else if (body.allSessions === true) {
+    } else if (sessionId !== null) {
+      revoked = await revokeSession(db(), sessionId, 'logout');
+    } else if (booleanField(body, 'allSessions')) {
       const accessToken =
-        typeof body.accessToken === 'string'
-          ? body.accessToken
-          : bearerFromHeader(request.headers.get('x-infra-access-token'));
+        stringField(body, 'accessToken') ??
+        bearerFromHeader(request.headers.get('x-infra-access-token'));
       if (accessToken === null) {
         throw new InfraError('VALIDATION_FAILED', 'allSessions requires the user access token');
       }

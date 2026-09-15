@@ -112,14 +112,23 @@ pnpm db:studio   # browse the Master DB
 
 ## Status
 
-All eight phases are implemented — **536 tests**, 6/6 packages building — and the platform has been
+All eight phases are implemented — **545 tests**, 6/6 packages building — and the platform has been
 exercised against live infrastructure rather than only against mocks. All twelve migrations are
 applied to the Neon Master DB (31 tables), and `scripts/live-proof.mjs` drives a real tenant
 database through the rules engine: eleven checks covering per-owner read isolation, a resource with
 no policy compiling to `1 = 0`, an insert forged under another user's name, and an update reaching
 across owners. All eleven land correctly.
 
-Two things found by running the system rather than testing it, both since fixed:
+Three things found by running the system rather than testing it, all since fixed:
+
+- **Email/password sign-in was completely broken**, and it looked exactly like a wrong password.
+  The app-scope plugin declared `fieldName: 'active_app_id'` — the real database column name — but
+  Better Auth's Drizzle adapter addresses a column by the Drizzle object's *property key*
+  (`activeAppId`). The adapter refused to start, `signInEmail` threw, and the token route catches
+  every failure from it and answers `401 invalid email or password` by design, so an unknown email
+  and a wrong password stay indistinguishable. A total outage wore the costume of a typo.
+  `scripts/auth-proof.mjs` now drives the whole flow — rotation, replay, family revocation — over
+  HTTP against a real Postgres: 28 of 28 assertions hold.
 
 - `expireImpersonations` and the shared rate-limit counter had **never worked** — a `Date`
   interpolated into a raw `sql` template loses the column's type mapper and reaches Postgres as
@@ -132,13 +141,20 @@ The encryption-key rotation drill has been run end to end (four tables, 9 cipher
 1→2→3) and caught a real bug in the rotation tool itself. `scripts/rotate-master-key.mjs` is the
 tool; `docs/runbooks.md` §2 is the procedure.
 
-Reproduce any of it:
+Five paths have now been driven end to end against a real Postgres — **99 assertions**, all
+holding. Each writes a redacted log to `logs/`:
 
 ```bash
-pnpm verify:live                          # schema + migration state, redacted log to logs/
-node scripts/live-proof.mjs               # rules enforced on real data
-INFRA_TEST_DATABASE_URL=... pnpm test     # includes the integration suite
+pnpm verify:live          # schema + migration state
+node scripts/live-proof.mjs   # 11 · policy enforced on real tenant data
+pnpm proof:auth           # 28 · sign-in, rotation, replay, family revocation, revoke
+pnpm proof:mfa            # 27 · TOTP enrolment, replay refusal, backup codes
+pnpm proof:ops            # 44 · impersonation guards, webhook SSRF, retry backoff, breaker
+INFRA_TEST_DATABASE_URL=... pnpm test   # includes the integration suite
 ```
+
+Still never run for real, and named here so nobody mistakes the list above for coverage:
+passkey/WebAuthn (needs a real browser), the dashboard UI, `/api/v1/query` with an `sk_` key.
 
 What remains before a v1.0 tag is operational, not architectural: a real mail provider for
 production (`INFRA_MAIL_PROVIDER=console` only prints the recovery link to a terminal), a backup

@@ -8,6 +8,7 @@ import { rotateTokenPair } from '@infra/auth';
 import { InfraError } from '@infra/core';
 import { recordAuditAsync } from '@infra/db';
 import { db } from '@/lib/db';
+import { stringField } from '@/lib/body-fields';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { clientIp, requireApiKey, userAgent } from '@/lib/guard';
 import { tokenIssuer } from '@/lib/issuer';
@@ -28,15 +29,17 @@ export async function POST(request: Request): Promise<Response> {
     const caller = await requireApiKey(request, 'auth:read');
     const cors = corsHeaders(origin, caller.app.allowedOrigins);
 
-    const body = (await request.json().catch(() => ({}))) as { refreshToken?: unknown };
-    if (typeof body.refreshToken !== 'string' || body.refreshToken === '') {
+    const body: unknown = await request.json().catch(() => ({}));
+    // Nhận cả `refreshToken` và `refresh_token` — xem lib/body-fields.
+    const refreshToken = stringField(body, 'refreshToken');
+    if (refreshToken === null) {
       throw new InfraError('VALIDATION_FAILED', 'refreshToken is required');
     }
 
     try {
       const pair = await rotateTokenPair(
         db(),
-        body.refreshToken,
+        refreshToken,
         { issuer: tokenIssuer() },
         { userAgent: userAgent(request), ipAddress: clientIp(request) },
       );

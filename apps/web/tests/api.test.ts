@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sqlIntent } from '../src/lib/sql-intent';
 import { DEFAULT_LIMIT, localRefusal, sweep } from '../src/lib/rate-limit';
 import { describeFailures, statusForJobs } from '../src/lib/job-report';
+import { booleanField, stringField, toSnakeCase } from '../src/lib/body-fields';
 
 describe('sqlIntent', () => {
   it('treats plain selects as reads', () => {
@@ -113,5 +114,46 @@ describe('statusForJobs', () => {
     ]);
     expect(line).toContain('impersonations');
     expect(line).toContain('1/2');
+  });
+});
+
+describe('body field naming tolerance', () => {
+  it('đọc được cả camelCase và snake_case', () => {
+    expect(stringField({ refreshToken: 'a' }, 'refreshToken')).toBe('a');
+    expect(stringField({ refresh_token: 'b' }, 'refreshToken')).toBe('b');
+    expect(stringField({ grant_type: 'password' }, 'grantType')).toBe('password');
+  });
+
+  it('camelCase thắng khi cả hai cùng có mặt', () => {
+    // Xác định, không phụ thuộc thứ tự khoá trong JSON.
+    expect(stringField({ refreshToken: 'camel', refresh_token: 'snake' }, 'refreshToken')).toBe('camel');
+    expect(stringField({ refresh_token: 'snake', refreshToken: 'camel' }, 'refreshToken')).toBe('camel');
+  });
+
+  it('trả null cho thiếu, rỗng, hoặc không phải chuỗi — không bao giờ chuỗi rỗng', () => {
+    // Chuỗi rỗng phải được coi như thiếu: một `refreshToken: ""` lọt qua sẽ đi tra hash của chuỗi rỗng.
+    expect(stringField({}, 'refreshToken')).toBeNull();
+    expect(stringField({ refreshToken: '' }, 'refreshToken')).toBeNull();
+    expect(stringField({ refresh_token: '' }, 'refreshToken')).toBeNull();
+    expect(stringField({ refreshToken: 123 }, 'refreshToken')).toBeNull();
+    expect(stringField({ refreshToken: null }, 'refreshToken')).toBeNull();
+    expect(stringField(null, 'refreshToken')).toBeNull();
+    expect(stringField('not-an-object', 'refreshToken')).toBeNull();
+  });
+
+  it('cờ boolean chỉ đúng khi là true thật, không phải giá trị truthy', () => {
+    // `allSessions: 'no'` thu hồi MỌI phiên của người dùng nếu nhận truthy. Phải là true.
+    expect(booleanField({ allSessions: true }, 'allSessions')).toBe(true);
+    expect(booleanField({ all_sessions: true }, 'allSessions')).toBe(true);
+    expect(booleanField({ allSessions: 'true' }, 'allSessions')).toBe(false);
+    expect(booleanField({ allSessions: 1 }, 'allSessions')).toBe(false);
+    expect(booleanField({}, 'allSessions')).toBe(false);
+  });
+
+  it('chuyển tên đúng cho các trường của API này', () => {
+    expect(toSnakeCase('refreshToken')).toBe('refresh_token');
+    expect(toSnakeCase('grantType')).toBe('grant_type');
+    expect(toSnakeCase('allSessions')).toBe('all_sessions');
+    expect(toSnakeCase('email')).toBe('email');
   });
 });

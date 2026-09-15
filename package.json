@@ -21,7 +21,10 @@
     "test:integration": "INFRA_TEST_DATABASE_URL=${INFRA_TEST_DATABASE_URL:?\u0111\u1eb7t DSN c\u1ee7a m\u1ed9t Postgres v\u1ee9t \u0111i} turbo run test --filter @infra/db",
     "drill:rotate": "node scripts/rotate-master-key.mjs",
     "drill:seed": "node scripts/drill-seed.mjs",
-    "drill:verify": "node scripts/drill-verify.mjs"
+    "drill:verify": "node scripts/drill-verify.mjs",
+    "proof:auth": "node scripts/auth-proof.mjs",
+    "proof:mfa": "node scripts/mfa-proof.mjs",
+    "proof:ops": "node scripts/ops-proof.mjs"
   },
   "devDependencies": {
     "@infra/adapters": "workspace:^",

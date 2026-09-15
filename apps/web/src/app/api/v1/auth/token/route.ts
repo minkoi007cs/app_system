@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { auth, issueAccessToken, issueTokenPair } from '@infra/auth';
 import { InfraError } from '@infra/core';
 import { addMember, getMembership, recordAuditAsync } from '@infra/db';
+import { stringField } from '@/lib/body-fields';
 import { db } from '@/lib/db';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { clientIp, requireApiKey, userAgent } from '@/lib/guard';
@@ -17,12 +18,6 @@ import { jsonOk, newRequestId, toErrorResponse } from '@/lib/response';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-interface TokenBody {
-  grant_type?: unknown;
-  email?: unknown;
-  password?: unknown;
-}
 
 export async function OPTIONS(request: Request): Promise<Response> {
   // Preflight happens before authentication, so the allowlist cannot be app-specific yet;
@@ -45,8 +40,9 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
-    const body = (await request.json().catch(() => ({}))) as TokenBody;
-    const grantType = typeof body.grant_type === 'string' ? body.grant_type : 'password';
+    const body: unknown = await request.json().catch(() => ({}));
+    // `grant_type` (OAuth) và `grantType` (quy ước của API này) đều được nhận — xem lib/body-fields.
+    const grantType = stringField(body, 'grantType') ?? 'password';
 
     // ── machine identity: no user, no refresh token, short life ──────────────
     if (grantType === 'client_credentials') {
@@ -100,14 +96,16 @@ export async function POST(request: Request): Promise<Response> {
     if (grantType !== 'password') {
       throw new InfraError('VALIDATION_FAILED', `unsupported grant_type: ${grantType}`);
     }
-    if (typeof body.email !== 'string' || typeof body.password !== 'string') {
+    const email = stringField(body, 'email');
+    const password = stringField(body, 'password');
+    if (email === null || password === null) {
       throw new InfraError('VALIDATION_FAILED', 'email and password are required');
     }
 
     let userId: string;
     try {
       const result = await auth().api.signInEmail({
-        body: { email: body.email, password: body.password },
+        body: { email, password },
       });
       userId = result.user.id;
     } catch {

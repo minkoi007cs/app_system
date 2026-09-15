@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.9.2** |
-| Current phase | **G1 đang đóng** — hai hàm chưa từng chạy được đã sửa, xoay khoá đã diễn tập thật |
+| Current version | **v0.9.4** |
+| Current phase | **G1 đang đóng** — 5 đường đi chính đã chạy thật, 99 khẳng định trên Postgres thật |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 39 test files, **536 tests** (core 383 · sdk 51 · adapters 50 · web 31 · db 21) |
-| Next task | **G1 còn lại** — mail thật cho production (cần Khoi chọn nhà cung cấp), diễn tập restore trên Neon branch, Turso |
+| Last test | `PASS` — 40 test files, **545 tests** (core 383 · sdk 51 · adapters 50 · web 36 · db 21 · auth 4) |
+| Next task | **Resend** — Khoi đang lấy API key; rồi kiểm luồng khôi phục mật khẩu đầu-cuối. Còn: diễn tập restore, Turso |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -235,6 +235,167 @@ Quy trình lẫn bài diễn tập đã viết sẵn. Thiếu đúng một thứ
 ```
 
 ---
+
+### 2026-09-15 · v0.9.4 · test(proof): ba đường đi nữa chạy thật, và dọn nợ tên trường API
+
+Sau khi đăng nhập hoá ra sập hoàn toàn (v0.9.3), câu hỏi rõ ràng là: **còn đường nào chưa từng
+chạy?** Ba đường nữa được chạy thật trên Postgres 16 cục bộ. Lần này **không tìm thấy lỗi nào trong
+hệ thống** — và đó là một kết quả, không phải một chuyến đi không.
+
+| Bằng chứng | Khẳng định | Kết quả |
+|---|---|---|
+| `scripts/auth-proof.mjs` | 28 | 🟢 (mở rộng từ 21) |
+| `scripts/mfa-proof.mjs` (new) | 27 | 🟢 |
+| `scripts/ops-proof.mjs` (new) | 44 | 🟢 |
+
+**MFA/TOTP** — `infra_mfa_factors` mang cả ciphertext (seed, AAD buộc theo dòng) lẫn nhiều cột
+timestamp, đúng hai loại đã hỏng âm thầm trước đây. Khẳng định trung tâm không phải "mã đúng thì
+qua" mà là **chống phát lại**: mã vừa dùng bị từ chối ngay cả khi còn trong cửa sổ trôi 30 giây —
+nếu không, ai nhìn qua vai người dùng có 30 giây để dùng lại nó. Cùng với: seed không lưu thô, chỉ
+lưu hash backup code, backup code cháy sau một lần dùng và hash bị xoá khỏi database, sinh lại thì
+**thay thế** bộ cũ chứ không cộng thêm, mã sinh từ seed của người khác bị từ chối, factor chưa xác
+minh không tính là có MFA.
+
+**Impersonation** — hàng rào chống leo thang quyền: **không mạo danh được một platform admin khác**
+(đó là bước sang quyền của admin thứ hai bằng đúng credential của mình), không tự mạo danh mình, lý
+do dưới ngưỡng ký tự bị từ chối. Và đường mà `expireImpersonations` chạy — hàm đã ném lỗi mọi lần
+suốt nhiều tháng — nay đóng đúng phiên hết giờ, ghi `ended_reason = expired`, và **idempotent**.
+
+**Webhook** — SSRF: `localhost`, `127.0.0.1`, `169.254.169.254`, `10.0.0.5` và cả `http://` đều bị
+từ chối **trước khi** có dòng nào được ghi. Secret chỉ hiện một lần, không lưu thô, và tenant kiểm
+được chữ ký bằng đúng secret đã nhận. Thất bại **lùi lịch về tương lai** (không quay lại hàng đợi
+ngay), đủ 20 lần hỏng liên tiếp thì **breaker tắt endpoint** và endpoint đã tắt không lấy việc nữa,
+một lần giao thành công **reset bộ đếm** (nếu không, endpoint hay hỏng rồi tự lành sẽ bị tắt oan),
+và xoay secret làm chữ ký cũ vô hiệu.
+
+**Nợ kỹ thuật đã dọn: tên trường API**
+
+`/api/v1/auth/token` đọc `grant_type` (quy ước OAuth 2.0), còn `/refresh` và `/revoke` đọc
+`refreshToken` (quy ước của API này). Cả hai lựa chọn đều có lý. Cái không có lý là bắt người tích
+hợp **nhớ endpoint nào theo quy ước nào** — gửi sai dạng thì lỗi là `refreshToken is required`
+trong lúc họ đang nhìn vào một body có `refresh_token` nằm ngay đó.
+
+Nay cả ba nhận cả hai dạng, qua `apps/web/src/lib/body-fields.ts`. Không bỏ dạng nào: bỏ
+`grant_type` là phá hợp đồng OAuth, bỏ `refreshToken` là phá SDK của chính dự án. **camelCase
+thắng** khi cả hai cùng có mặt, để hành vi là xác định thay vì phụ thuộc thứ tự khoá trong JSON.
+
+Hai khẳng định trong test đáng nêu vì chúng là loại "sai thì rất tệ": chuỗi rỗng phải được coi như
+**thiếu** (một `refreshToken: ""` lọt qua sẽ đi tra hash của chuỗi rỗng), và `allSessions` chỉ đúng
+khi là `true` thật chứ không phải truthy (`allSessions: 'no'` mà nhận truthy thì đăng xuất người
+dùng khỏi mọi thiết bị).
+
+**Hai khẳng định của chính mình bị sửa vì đúng do lý do sai**
+- `auth-proof` kiểm "sau revoke còn 0 token sống". Nó xanh, nhưng sẽ xanh **cả khi revoke đăng xuất
+  người dùng khỏi mọi thiết bị**. Đổi thành: revoke phải đóng **đúng một** phiên (`before - 1`), và
+  thêm một khẳng định riêng cho `allSessions` — hành vi thu hồi hết là có chủ đích và phải khác.
+- `ops-proof` in **secret webhook thật** ra file log, vi phạm đúng quy tắc trong header của chính
+  nó. So sánh dưới dạng boolean thay vì truyền giá trị vào hàm `check` (hàm này in cả actual).
+
+**Modified files**
+- `apps/web/src/lib/body-fields.ts` (new) · `apps/web/tests/api.test.ts` (edit, +5 test)
+- `apps/web/src/app/api/v1/auth/{token,refresh,revoke}/route.ts` (edit)
+- `scripts/mfa-proof.mjs` · `scripts/ops-proof.mjs` (new) · `scripts/auth-proof.mjs` (edit)
+- `package.json` — thêm `proof:mfa`, `proof:ops`
+
+**Test status** — `pnpm build` PASS (6/6) · `pnpm typecheck` PASS · `pnpm test` PASS
+(**545 passed**: core 383 · sdk 51 · adapters 50 · web 36 · db 21 · auth 4)
+
+**Notes / decisions**
+- **Chưa chạy thật**: passkey/WebAuthn (cần trình duyệt thật), dashboard UI, `/api/v1/query` với
+  khoá `sk_`, và `emitToUserApps`. Đó là danh sách còn lại của cùng câu hỏi.
+- Khoi chọn **Resend** cho mail production. Đang chờ API key để kiểm luồng khôi phục mật khẩu
+  đầu-cuối bằng thư thật.
+
+**Next task** → Resend: kiểm gửi thật + luồng khôi phục mật khẩu. Rồi diễn tập restore, Turso.
+
+### 2026-09-15 · v0.9.3 · fix(auth): đăng nhập email/mật khẩu sập hoàn toàn, cải trang thành "sai mật khẩu"
+
+**Tìm ra thế nào**
+
+Mục tiêu ban đầu khiêm tốn hơn nhiều: viết bằng chứng LIVE cho xoay vòng refresh token và phát
+hiện tái sử dụng — cơ chế bảo mật quan trọng nhất của hệ thống, và cho tới giờ chỉ được chứng minh
+trên driver giả. Dựng Postgres 16 cục bộ, `next start`, gọi đúng endpoint mà app con gọi.
+
+Bước đầu tiên đã đỏ: `POST /api/v1/auth/token` trả **401**.
+
+**Lỗi: `fieldName` chỉ vào tên cột database, nhưng adapter tra theo property key**
+
+`app-scope.plugin.ts` khai báo `fieldName: 'active_app_id'` cho trường `activeAppId`. Nghe hoàn
+toàn hợp lý — đó đúng là tên cột trong database. Nhưng Drizzle adapter của Better Auth tra cột bằng
+**property key của đối tượng Drizzle**. Chính mã của nó nói vậy:
+
+> *"Reads a Drizzle schema object the way the adapter addresses it: each table by the key it is
+> exported under, each column by its property name."*
+
+Schema là `activeAppId: uuid('active_app_id')` → property key là `activeAppId`. Better Auth đi tìm
+một property tên `active_app_id`, không thấy, và **từ chối khởi động**:
+
+```
+SCHEMA_MISMATCH · missing-column session.active_app_id
+                · missing-column session.mfa_verified_at
+```
+
+Cả hai cột **có mặt** trong database (kiểm bằng `psql`) và **có mặt** trong schema Drizzle. Không
+có gì bị đặt tên sai. Chỉ có hai tầng không đồng ý với nhau về việc đang tra tên nào.
+
+**Vì sao không ai phát hiện: hậu quả bị cải trang**
+
+`auth().api.signInEmail` ném lỗi. Route bắt **mọi** lỗi từ nó và trả 401 *"invalid email or
+password"* — cố ý, để email lạ và mật khẩu sai không phân biệt được (chống dò tài khoản, T5.18).
+
+Thiết kế đó đúng. Nhưng nó cũng có nghĩa một sự cố **sập toàn phần** mang đúng bộ mặt của một mật
+khẩu gõ sai, cho mọi người dùng, và không có gì trong response để phân biệt. Trên production điều
+này hiện ra dưới dạng "không ai đăng nhập được nhưng hệ thống báo 401 bình thường" — đúng cái tình
+huống khó chẩn đoán nhất.
+
+Sửa: bỏ `fieldName` ở cả hai trường. Drizzle đã sở hữu việc đặt tên cột, và adapter đọc tên cột
+thật từ đối tượng column khi nó dựng SQL.
+
+**BẰNG CHỨNG LIVE — 21/21 khẳng định đúng**
+
+`scripts/auth-proof.mjs`, Postgres thật + `next start` thật, qua HTTP:
+
+```
+OK  đăng nhập đúng mật khẩu trả 200            OK  mật khẩu sai không trả 200
+OK  refresh hợp lệ cấp token MỚI               OK  family có 2 dòng, chỉ 1 dùng được
+OK  trình lại token đã đốt bị từ chối          OK  → CẢ FAMILY bị thu hồi (0 token sống)
+OK  token mới cũng chết theo family            OK  audit log có auth.token.reuse_detected
+OK  đăng nhập lại vẫn được (không khoá tài khoản)
+OK  token rác bị từ chối, không chạm family    OK  revoke đóng đúng phiên
+```
+
+Đây là lần đầu tiên xoay vòng + phát hiện tái sử dụng được chứng minh ngoài mock. Nó cũng là cơ sở
+thực nghiệm cho ADR-018: một token đã dùng xuất hiện lần hai **thu hồi cả family** — nên SDK buộc
+phải gộp refresh single-flight, nếu không năm request song song sẽ tự đăng xuất người dùng trong khi
+mọi tầng đều hành xử đúng.
+
+**Hàng rào**
+- `packages/auth/tests/app-scope.plugin.test.ts` (new, 4 test) — không cần database. Giữ bất biến:
+  **mọi trường plugin khai báo phải tồn tại như một property key trên bảng Drizzle**, tính đúng
+  theo phép tra của adapter (`field.fieldName ?? key`). Thêm một khẳng định hẹp bắt đúng hình dạng
+  của lỗi cũ: `fieldName` không được là dạng snake_case của chính khoá đó.
+  Kiểm chứng ngược: đặt lại `fieldName` → 2/4 test đỏ.
+- `packages/db/src/queries/inspect.ts` — thêm `tableColumnKeys(model)`. Nằm ở `@infra/db` theo
+  ADR-009: `drizzle-orm` không phải dependency của `@infra/auth` và không nên là.
+
+**Sửa trong lúc viết bằng chứng** (bản đầu của script tự dựng credential row bằng
+`context.password.hash` và `signInEmail` trả 401): gọi thẳng `signUpEmail`. Tự dựng credential row
+là tự đoán những gì Better Auth mong đợi — đoán sai thì bằng chứng nói về thứ mình dựng, không nói
+về hệ thống.
+
+**Test status** — `pnpm build` PASS (6/6) · `pnpm typecheck` PASS · `pnpm test` PASS
+(**540 passed**: core 383 · sdk 51 · adapters 50 · web 31 · db 21 · auth 4)
+
+**Notes / decisions**
+- ADR-031.
+- Lần thứ ba trong dự án cùng một bài học, và lần này đắt nhất: **mỗi đường đi phải được chạy một
+  lần bằng tay.** Migration (v0.7.4) · bốn câu SQL (v0.9.1) · đăng nhập (v0.9.3). Cả ba lần, test
+  đều xanh; cả ba lần, thứ phát hiện ra là gọi thật một lần.
+- Ghi chú API không nhất quán, chưa sửa: `/api/v1/auth/token` đọc `grant_type` (snake_case, theo
+  quy ước OAuth) còn `/refresh` và `/revoke` đọc `refreshToken` (camelCase). Không phải lỗi, nhưng
+  là thứ sẽ làm người tích hợp mất thời gian.
+
+**Next task** → G1 còn lại: mail thật cho production, diễn tập restore trên Neon branch, Turso.
 
 ### 2026-09-14 · v0.9.2 · test(adapters): nhánh LibSQL lần đầu chạy trên LibSQL thật
 
