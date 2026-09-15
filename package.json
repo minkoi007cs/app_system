@@ -16,7 +16,12 @@
     "db:migrate": "pnpm --filter @infra/db exec drizzle-kit migrate",
     "db:studio": "pnpm --filter @infra/db exec drizzle-kit studio",
     "smoke": "tsx scripts/smoke-multi-provider.mts",
-    "verify:schema": "pnpm --filter @infra/db exec tsx scripts/verify-schema.mts"
+    "verify:schema": "pnpm --filter @infra/db exec tsx scripts/verify-schema.mts",
+    "verify:live": "tsx scripts/verify-live.mts",
+    "test:integration": "INFRA_TEST_DATABASE_URL=${INFRA_TEST_DATABASE_URL:?\u0111\u1eb7t DSN c\u1ee7a m\u1ed9t Postgres v\u1ee9t \u0111i} turbo run test --filter @infra/db",
+    "drill:rotate": "node scripts/rotate-master-key.mjs",
+    "drill:seed": "node scripts/drill-seed.mjs",
+    "drill:verify": "node scripts/drill-verify.mjs"
   },
   "devDependencies": {
     "@infra/adapters": "workspace:^",

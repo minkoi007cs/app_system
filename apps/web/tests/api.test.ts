@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sqlIntent } from '../src/lib/sql-intent';
 import { DEFAULT_LIMIT, localRefusal, sweep } from '../src/lib/rate-limit';
+import { describeFailures, statusForJobs } from '../src/lib/job-report';
 
 describe('sqlIntent', () => {
   it('treats plain selects as reads', () => {
@@ -82,5 +83,35 @@ describe('rate limit — the local layer', () => {
     const verdict = localRefusal(key, 1, 1_000);
     expect(verdict?.resetInMs).toBe(59_000);
     expect(verdict?.remaining).toBe(0);
+  });
+});
+
+describe('statusForJobs', () => {
+  it('gives a 200 only when every job succeeded', () => {
+    expect(statusForJobs([{ job: 'a', ok: true, detail: 0 }])).toBe(200);
+    expect(statusForJobs([])).toBe(200);
+  });
+
+  it('gives a non-2xx as soon as one job failed', () => {
+    // Bất biến thật sự của endpoint này. Cron gọi bằng `curl -fsS` để một lần hỏng thành mã thoát
+    // khác 0; trả 200 kèm `ok:false` trong body khiến kiểm tra đó vô nghĩa — và đó đúng là cách
+    // `expireImpersonations` hỏng suốt mà không ai biết.
+    expect(
+      statusForJobs([
+        { job: 'a', ok: true, detail: 0 },
+        { job: 'b', ok: false, detail: 'Error' },
+        { job: 'c', ok: true, detail: 3 },
+      ]),
+    ).toBeGreaterThanOrEqual(500);
+  });
+
+  it('names which jobs failed, and says nothing when none did', () => {
+    expect(describeFailures([{ job: 'a', ok: true, detail: 0 }])).toBe('');
+    const line = describeFailures([
+      { job: 'a', ok: true, detail: 0 },
+      { job: 'impersonations', ok: false, detail: 'Error' },
+    ]);
+    expect(line).toContain('impersonations');
+    expect(line).toContain('1/2');
   });
 });

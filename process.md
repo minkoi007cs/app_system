@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Current version | **v0.7.3** |
-| Current phase | **Phase 8 hoàn tất — gate G8 đóng. Cả 8 phase đã xong.** |
+| Current version | **v0.9.2** |
+| Current phase | **G1 đang đóng** — hai hàm chưa từng chạy được đã sửa, xoay khoá đã diễn tập thật |
 | Phase status | `LIVE` — Master DB đã chạy thật trên Neon, định tuyến đa nhà cung cấp đã kiểm chứng 2/2 |
 | Last build | `PASS` — 6/6 packages (turbo 2.10.12) |
-| Last test | `PASS` — 38 test files, **518 tests** (core 378 · sdk 51 · adapters 45 · web 28 · db 16) |
-| Next task | **G0 · chặn v1.0**: `pnpm db:migrate` (0007→0010) — xem §4 v1.0 Readiness |
+| Last test | `PASS` — 39 test files, **536 tests** (core 383 · sdk 51 · adapters 50 · web 31 · db 21) |
+| Next task | **G1 còn lại** — mail thật cho production (cần Khoi chọn nhà cung cấp), diễn tập restore trên Neon branch, Turso |
 
 > **File này là gì (VN):** đây là *nhật ký sống* của dự án. `tech.md` trả lời "hệ thống được
 > thiết kế thế nào", còn `process.md` trả lời "hiện đang làm tới đâu, việc tiếp theo là gì".
@@ -48,7 +48,7 @@ pnpm install && pnpm build && pnpm test
 
 ## 2. Roadmap — Phase Checkboxes
 
-### Phase 1 — Foundation, Security & Master DB Setup  `IN PROGRESS`
+### Phase 1 — Foundation, Security & Master DB Setup  `DONE` ✅
 - [x] **T1.1** Khởi tạo monorepo (pnpm workspaces + Turborepo + `tsconfig.base.json` strict)
 - [x] **T1.2** `packages/core`: `crypto.ts` (AES-256-GCM encrypt/decrypt + AAD + key version)
 - [x] **T1.3** `packages/core`: `api-key.ts` (sinh `pk_live_…`, hash SHA-256, tách prefix)
@@ -59,16 +59,16 @@ pnpm install && pnpm build && pnpm test
 - [x] **T1.8** `packages/db/src/queries/` — truy vấn có kiểu cho apps / keys / configs / audit
 - [x] **G1** ✅ Gate đã đóng — Phase 1 hoàn tất
 
-### Phase 2 — Centralized Auth Hub  `DONE (chờ chạy thật)`
+### Phase 2 — Centralized Auth Hub  `DONE` ✅
 - [x] **T2.1** `packages/auth`: khởi tạo Better Auth + Drizzle adapter trên Master DB
 - [x] **T2.2** Email/Password (tối thiểu 12 ký tự, bắt xác minh email khi production)
 - [x] **T2.3** OAuth Google · GitHub · Microsoft — chỉ bật provider nào có đủ cặp id/secret
 - [x] **T2.4** `app-scope.plugin.ts` + bảng `infra_app_members` + `session.active_app_id`
 - [x] **T2.5** Route handler `apps/web/src/app/api/auth/[...all]/route.ts` (khởi tạo lazy)
 - [x] **T2.6** `trustedOrigins` động đọc từ `infra_apps.allowed_origins`
-- [ ] **T2.7** Test cách ly user giữa các app — cần Master DB thật (integration test sau T1.7)
+- [x] **T2.7** Test cách ly user giữa các app ✅ — bộ adversarial `cross-app` + live-proof 2026-09-14
 
-### Phase 3 — Dynamic Multi-DB Adapter  `IN PROGRESS`
+### Phase 3 — Dynamic Multi-DB Adapter  `DONE` ✅ *(LibSQL: có test, chưa chạm DB thật — G1-6)*
 - [x] **T3.1** `packages/adapters`: interface `DatabaseAdapter` + `types.ts`
 - [x] **T3.2** `postgres.adapter.ts` (Neon + Supabase qua `postgres-js`, `prepare: false` cho pooler)
 - [x] **T3.3** `libsql.adapter.ts` (Turso qua `@libsql/client`, tách authToken khỏi DSN)
@@ -78,9 +78,9 @@ pnpm install && pnpm build && pnpm test
 - [x] **T3.7** `apiKeyGuard` + route `POST /api/v1/query`, `GET /api/v1/health`, `GET /api/v1/me`
 - [x] **T3.8** Ghi `infra_audit_logs` bất đồng bộ (fire-and-forget, không chặn response)
 - [x] **T3.9** Vitest cho adapters + resolver (driver giả lập) — 30 test
-- [ ] **G3** ✅ Gate → bump **v0.4.0**
+- [x] **G3** ✅ Gate đã đóng
 
-### Phase 4 — Admin Dashboard & Client SDK  `DONE (chờ chạy thật)`
+### Phase 4 — Admin Dashboard & Client SDK  `DONE` ✅
 - [x] **T4.1** `apps/web`: Next.js **16.3.4** App Router + Tailwind v4 + Shadcn UI + Lucide (ADR-008)
 - [x] **T4.2** Sign-in / sign-up cho admin (email + 3 nút OAuth) + guard layout dashboard
 - [x] **T4.3** CRUD app bằng Server Actions: tạo, sửa origin, đình chỉ, lưu trữ
@@ -90,9 +90,9 @@ pnpm install && pnpm build && pnpm test
 - [x] **T4.7** Viewer `infra_audit_logs`
 - [x] **T4.8** `packages/sdk`: `createInfraClient()` + auth + db + kiểu `Result`
 - [x] **T4.9** `README.md` quickstart "dưới 10 dòng"
-- [ ] **G4** Gate cuối: cần chạy thật với Neon rồi tích hợp thử một child app → bump **v1.0.0**
+- [x] **G4** ✅ Đã chạy thật với Neon (2026-09-14) và tích hợp child app `examples/notes-app` (T8.7)
 
-### Phase 5 — Identity Plane (Auth Core)  `NOT STARTED`  ← giai đoạn 1 của Khoi
+### Phase 5 — Identity Plane (Auth Core)  `DONE` ✅  ← giai đoạn 1 của Khoi
 > Thiết kế đầy đủ ở `docs/iam-blueprint.md`. Đây là phase lớn nhất; ba phase sau đứng lên nó.
 - [x] **T5.1** `infra_signing_keys` + JWKS endpoint + ký ES256, xoay khoá 90 ngày ✅
 - [x] **T5.2** Access token (JWT 10 phút, claims `aud`=app_id / `sid` / `act` / `amr`) ✅
@@ -114,7 +114,7 @@ pnpm install && pnpm build && pnpm test
 - [x] **T5.18** Chống dò mật khẩu, kiểm mật khẩu đã lộ (HIBP k-anonymity), luồng khôi phục tài khoản ✅
 - [x] **T5.19** Webhook sự kiện identity cho app con ✅
 - [x] **T5.20** Test: cách ly chéo app, tái sử dụng refresh token, leo thang quyền, mặc định từ chối ✅
-- [ ] **G5** Gate → bump **v0.4.0**
+- [x] **G5** ✅ Gate đã đóng — bump **v0.4.0**
 
 ### Phase 6 — Auto-provisioning & Delegation  `DONE`  ← giai đoạn 2
 - [x] **T6.1** Neon API: tự tạo project/branch khi tạo app mới ✅
@@ -141,23 +141,35 @@ pnpm install && pnpm build && pnpm test
 - [x] **T8.5** UI: MFA, passkey, danh sách thiết bị & phiên ✅
 - [x] **T8.6** UI: service account, workspace ✅
 - [x] **T8.7** Tích hợp thật một app con (AI Study OS) làm bằng chứng dưới 10 dòng ✅
-- [ ] **G8** Gate → **v1.0.0**
+- [x] **G8** ✅ Tám phase đã xong. **v1.0.0 vẫn chưa phát hành** — còn G1 ở §4 (mail production, diễn tập backup/xoay khoá, cron).
 
 ---
 
 ## 3. Next Task — chi tiết
 
-> **T1.7 — Đưa schema lên Neon Master DB** ⛔ *blocked: cần Khoi tạo tài khoản Neon*
->
-> Các bước Khoi làm (chi tiết trong `docs/setup-databases.md`, Phần 1):
-> 1. Tạo tài khoản Neon → project `infra-master` → copy connection string.
-> 2. `cp .env.example .env.local`, dán chuỗi vào `INFRA_MASTER_DATABASE_URL`.
-> 3. Sinh `INFRA_MASTER_ENCRYPTION_KEY` (`openssl rand -hex 32`) + `BETTER_AUTH_SECRET`,
->    **sao lưu khoá mã hoá vào password manager**.
-> 4. `pnpm db:migrate` → tạo 9 bảng; `pnpm db:studio` để xem.
->
-> Xong bước này → đóng gate **G1**, bump **v0.2.0**, sang Phase 2 (Better Auth).
-> Trong lúc chờ, có thể làm trước Phase 3 (adapters) vì không cần Master DB thật.
+> **G1 — những việc còn lại trước khi phát hành v1.0.** Tám phase đã xong và hệ thống đã chạy
+> thật (xem §4). Bốn việc còn lại đều cần Khoi quyết định hoặc cần chạy trên máy thật, không
+> phải viết thêm code.
+
+**G1-a · Mail thật cho production** *(chặn v1.0)*
+1. Chọn nhà cung cấp: `resend` (một lệnh gọi HTTPS, không cần SDK) hoặc `webhook` (tự relay qua SMTP).
+2. Đặt vào `.env.local` khi deploy — **không dán vào chat**:
+   `INFRA_MAIL_PROVIDER`, `INFRA_MAIL_API_KEY`, `INFRA_MAIL_FROM`.
+3. Thử: gọi luồng quên mật khẩu, xác nhận thư tới hộp thật.
+> `console` đang đặt sẵn chỉ dùng được ở dev — nó in link ra terminal, không ai nhận được thư.
+
+**G1-b · Diễn tập backup / restore** — `docs/runbooks.md` §3.
+Backup chưa thử khôi phục thì chưa phải backup. Tạo một Neon branch, restore vào đó, chạy
+`pnpm verify:live` trỏ vào branch ấy, xác nhận đủ 31 bảng.
+
+**G1-c · Diễn tập xoay `INFRA_MASTER_ENCRYPTION_KEY`** — `docs/runbooks.md` §2.
+Quy trình lẫn bài diễn tập đã viết sẵn. Thiếu đúng một thứ: chạy nó một lần trên branch.
+
+**G1-d · Cài lịch cron** — `docs/runbooks.md` §1.
+`INFRA_INTERNAL_TOKEN` đã có trong `.env.local`. Còn lại là một dòng crontab (self-host) hoặc
+`vercel.json` (Vercel) gọi `POST /api/internal/maintenance` mỗi giờ.
+
+**Không chặn:** G1-6 (Turso chưa cấu hình lần nào — smoke test đa nhà cung cấp mới 2/3).
 
 ---
 
@@ -171,21 +183,21 @@ pnpm install && pnpm build && pnpm test
 
 | # | Khoảng cách | Vì sao chặn | Ai làm được |
 |---|---|---|---|
-| **G0-1** | **4 migration chưa apply lên Neon** (0007→0010) | Master DB thật đang thiếu 8 bảng. Mọi thứ của Phase 5.18 trở đi sẽ lỗi runtime ngay lần gọi đầu. | Khoi (`pnpm db:migrate`) |
-| **G0-2** | **Mail transport: đã có, chưa cấu hình** | `@infra/core/mailer` có 3 transport (`console` · `resend` · `webhook`). Còn lại đúng một việc: **đặt `INFRA_MAIL_PROVIDER` + khoá**. Chưa đặt thì `unconfigured` **ném lỗi và log to**, không âm thầm nuốt. | Khoi (chọn nhà cung cấp, đặt env) |
-| ~~**G0-3**~~ | ~~Rate limit trong bộ nhớ tiến trình~~ ✅ | `infra_rate_limits` là bộ đếm dùng chung, một upsert mỗi lượt kiểm. Lớp trong bộ nhớ giữ lại nhưng **chỉ được phép từ chối, không được phép cho qua** — xem ADR-025. | xong |
-| **G0-4** | **Chưa chạy thật lần nào end-to-end** | 503 test chứng minh các mảnh đúng và đường nối khớp. Chưa có gì chứng minh một app con thật đọc được dữ liệu thật qua policy thật. | Khoi + `examples/notes-app` setup |
+| ~~**G0-1**~~ | ~~Migration chưa apply~~ ✅ | **Kiểm chứng 2026-09-14** bằng `pnpm verify:live`: 31 bảng, 12 migration đã ghi nhận. Log ở `logs/verify-2026-09-14T05-52-52-018Z.log`. | xong |
+| **G0-2** | **Dev: xong. Production: chưa.** | `INFRA_MAIL_PROVIDER=console` đã đặt 2026-09-14 → luồng khôi phục chạy được ở dev. **Production vẫn cần một nhà cung cấp thật** (`resend` hoặc `webhook`) — `console` chỉ in ra log, không ai nhận được thư. | Khoi: chọn nhà cung cấp khi deploy |
+| ~~**G0-3**~~ | ~~Rate limit trong bộ nhớ tiến trình~~ ✅ | `infra_rate_limits` là bộ đếm dùng chung, một upsert mỗi lượt kiểm; lớp trong bộ nhớ **chỉ được từ chối, không được cho qua** (ADR-025). **Đóng ở v0.7.3 là quá sớm**: câu upsert ném lỗi mọi lần chạy và vì fail-open nên không ai thấy. Sửa + kiểm chứng trên Postgres thật ở v0.9.1. | xong |
+| ~~**G0-4**~~ | ~~Chưa chạy thật lần nào~~ ✅ | **2026-09-14: 11/11 phán quyết đúng trên Master DB thật + database Neon thật.** Log ở `logs/live-proof-2026-09-14T06-19-45-519Z.log`. | xong |
 
 ### Nên làm trước khi có người dùng thật
 
 | # | Khoảng cách | Ghi chú |
 |---|---|---|
-| G1-1 | Backup/restore Master DB: đã có runbook, **chưa bật và chưa thử** | `docs/runbooks.md` §3. Backup chưa thử khôi phục thì chưa phải backup — nó chỉ là một niềm tin. |
-| G1-2 | `INFRA_MASTER_ENCRYPTION_KEY`: đã có runbook, **chưa diễn tập** | `docs/runbooks.md` §2 có cả quy trình lẫn bài diễn tập trên Neon branch. Còn thiếu đúng một thứ: chạy bài diễn tập đó. Một quy trình chưa ai chạy bao giờ không phải quy trình, nó là một ý tưởng. |
-| ~~G1-3~~ | ~~Webhook drain chưa có lịch chạy~~ ✅ | Lịch cron cho cả hai endpoint đã viết trong `docs/runbooks.md` §1 (cron máy tự host + `vercel.json`). Khoi vẫn phải **đặt `INFRA_INTERNAL_TOKEN` và cài lịch** — chưa đặt thì endpoint từ chối tất cả. |
+| G1-1 | Backup/restore Master DB: đã có runbook, **chưa bật và chưa thử** | `docs/runbooks.md` §3. Cách kiểm giờ là một lệnh: `INFRA_MASTER_DATABASE_URL="<dsn branch>" pnpm verify:live` — phải ra 31 bảng, 12 migration. Vẫn cần Khoi bật PITR và tạo branch. Backup chưa thử khôi phục thì chưa phải backup. |
+| ~~G1-2~~ | ~~Xoay khoá: có runbook, chưa diễn tập~~ ✅ | **Đã diễn tập 2026-09-14** trên Postgres 16 với schema thật (31 bảng), 9 dòng ciphertext / 4 bảng, xoay 1→2→3, idempotent. Bài diễn tập bắt được một lỗi thật trong công cụ. Runbook cũ **sẽ làm mất dữ liệu** nếu làm theo — đã viết lại (ADR-027/028/029). Công cụ: `scripts/rotate-master-key.mjs`. |
+| G1-3 | Lịch chạy: token đã đặt, **có công cụ cài**, chưa cài trên máy đích | `vercel.json` khai báo sẵn hai cron (deploy Vercel là có). Tự host: `./scripts/install-cron.sh`, idempotent, token nằm ở file quyền 600 chứ không nhúng vào crontab. Hai endpoint **đã gọi thử thật** và đã sửa hai lỗi tìm ra khi gọi (v0.9.1). |
 | ~~G1-4~~ | ~~Job dọn chưa có lịch~~ ✅ | Gom vào `POST /api/internal/maintenance`, chạy mỗi giờ. |
 | ~~G1-5~~ | ~~Chưa có CI~~ ✅ | `.github/workflows/ci.yml`: install → build → test → typecheck → **kiểm migration drift**. Không cần secret nào. |
-| G1-6 | Turso chưa cấu hình lần nào | Smoke test đa nhà cung cấp mới chạy 2/3. Nhánh LibSQL của compiler có test nhưng chưa chạm database LibSQL thật. |
+| G1-6 | Turso chưa cấu hình lần nào — **nhưng nhánh LibSQL đã chạy thật** | `packages/adapters/tests/libsql-live.test.ts` chạy SQL do compiler sinh ra trên một database LibSQL thật (`@libsql/client` mở file cục bộ — cùng client, cùng đường mã, chỉ khác chỗ lưu). Đã kiểm: placeholder `?` chứ không phải `$n`, cách ly theo chủ sở hữu, filter client không nới rộng được, thứ tự tham số khi ba nguồn nối vào một câu. **Còn lại thuộc về Turso chứ không thuộc LibSQL**: authToken, TLS, độ trễ mạng, replica. |
 
 ### Rủi ro đã biết và chấp nhận
 
@@ -223,6 +235,288 @@ pnpm install && pnpm build && pnpm test
 ```
 
 ---
+
+### 2026-09-14 · v0.9.2 · test(adapters): nhánh LibSQL lần đầu chạy trên LibSQL thật
+
+Cùng một lý lẽ với v0.9.1, áp sang phương ngữ còn lại. Compiler sinh SQL cho hai phương ngữ.
+Postgres đã chạy thật (live-proof trên Neon). LibSQL thì chưa bao giờ — và lý do vẫn được ghi là
+"chưa có tài khoản Turso".
+
+Nhưng Turso là LibSQL có hosting. `@libsql/client` mở database cục bộ bằng `file:`, **cùng client,
+cùng đường mã**. Nên phần lớn rủi ro của G1-6 đóng được ngay, không cần tài khoản nào.
+
+**Deliverables**
+- `packages/adapters/tests/libsql-live.test.ts` (new, 5 test) — đi đúng đường của
+  `/api/v1/data/:resource`: parse → quyết định → biên dịch → thực thi, chỉ khác đầu kia là LibSQL.
+  Kiểm: placeholder `?` chứ không phải `$n` (một câu SQL Postgres lọt sang sẽ hỏng đúng ở đây, và
+  trên driver giả thì không), cách ly theo chủ sở hữu, filter của client **thu hẹp được chứ không
+  nới rộng được**, thứ tự tham số khi filter + policy + limit nối vào cùng một câu, và tài nguyên
+  không có policy biên dịch thành `1 = 0`.
+
+**Test status** — `pnpm build` PASS · `pnpm typecheck` PASS · `pnpm test` PASS (**536 passed**)
+
+**Notes** — G1-6 thu hẹp lại đúng phần còn thật sự chưa kiểm được: authToken, TLS, độ trễ mạng và
+hành vi replica. Đó là phần thuộc về Turso, và cần Khoi mở tài khoản. Phần thuộc về LibSQL thì xong.
+
+**Next task** → G1 còn lại: mail thật cho production, diễn tập restore trên Neon branch, Turso.
+
+### 2026-09-14 · v0.9.1 · fix(db): hai hàm chưa từng chạy được lần nào, trong khi 518 test đều xanh
+
+**Tìm ra thế nào**
+
+Trước khi bảo Khoi cài cron, gọi thử hai endpoint mà cron sẽ gọi — trên Postgres 16 cục bộ, bằng
+`curl`, đúng cách cron sẽ gọi. Lần đầu tiên hai endpoint đó được gọi thật.
+
+```
+{"job":"login_attempts","ok":true}  {"job":"impersonations","ok":false,"detail":"Error"}
+```
+
+HTTP **200**.
+
+**Lỗi 1 — `Date` trong template `sql` thô tới Postgres dưới dạng không parse được**
+
+Một `Date` nội suy vào template `sql` đi thẳng tới driver, **không qua type mapper của cột**, nên
+tới nơi dưới dạng `Mon Sep 14 2026 06:39:44 GMT+0000 (Coordinated Universal Time)`. Postgres không
+parse được thành `timestamptz`. Câu lệnh ném lỗi **mọi lần chạy**. Ba chỗ dính:
+
+| Hàm | Hậu quả thật |
+|---|---|
+| `expireImpersonations` | Phiên mạo danh hết giờ **không bao giờ bị đóng** — đúng thứ mà chính docstring của endpoint cảnh báo |
+| `consumeShared` | **Bộ đếm rate limit dùng chung chưa từng ghi được một dòng nào** |
+| `findValidRecoveryToken` (security.ts) | Cùng lỗi, trên đường khôi phục tài khoản |
+
+`consumeShared` là nghiêm trọng nhất, vì nó **fail open** theo thiết kế: tầng gọi bắt lỗi và cho
+qua. Nên trên production nó trông y hệt như đang hoạt động — không log lỗi, không request nào bị
+chặn sai, hạn mức âm thầm tụt về lớp trong bộ nhớ của từng instance. Đúng loại lỗi mà chính header
+của `rate-limit.ts` gọi tên: *"the worst kind of security bug: one that looks like it is working"*.
+**G0-3 từng được đánh dấu đóng ở v0.7.3 là sai** — code đã viết đúng ý tưởng nhưng chưa từng chạy.
+
+Sửa: dùng `lte`/`gt` của drizzle (có type mapper) thay cho template; chỗ buộc phải dùng template
+(`case when` trong upsert) thì truyền chuỗi ISO và ép kiểu `::timestamptz` tường minh.
+
+**Lỗi 2 — job hỏng mà HTTP vẫn 200**
+
+Runbook dặn cron gọi bằng `curl -fsS` để một lần hỏng thành mã thoát khác 0. Endpoint trả 200 kèm
+`ok:false` trong body làm kiểm tra đó vô nghĩa: curl vui vẻ, cron im lặng, và một job hỏng mỗi giờ
+suốt nhiều tháng là vô hình. Nay bất kỳ job nào hỏng → **HTTP 500**, body vẫn liệt kê đủ từng job
+nên biết *job nào* chứ không chỉ "có gì đó hỏng". Kiểm chứng: đổi tên bảng cho job hỏng →
+`curl -f` thoát mã 22.
+
+**Lỗi 3 — vì sao 518 test không bắt được, và hàng rào để nó không lặp lại**
+
+Không có test nào chạm Postgres thật. Cả bộ test chạy trên fake/mock, và một driver giả không bao
+giờ từ chối một tham số sai kiểu.
+
+- `packages/db/tests/integration.test.ts` — bỏ qua khi không có `INFRA_TEST_DATABASE_URL`, nên
+  `pnpm test` trên máy trống vẫn xanh, nhưng **hiện ra là "skipped"** chứ không biến mất, để không
+  ai nhầm "không chạy" với "đã chạy và xanh". Kiểm chứng ngược: hoàn nguyên bản sửa → 4/5 test đỏ.
+- `.github/workflows/ci.yml` — thêm service `postgres:16` + health check, apply migration 0000→0011
+  lên đó (tự nó cũng là một kiểm tra: migration phải apply sạch từ rỗng), rồi chạy test. Vẫn không
+  cần secret nào.
+- `turbo.json` — thêm `INFRA_TEST_DATABASE_URL` vào `env` của task `test`. Thiếu dòng này turbo
+  lọc mất biến và test tích hợp **tự bỏ qua trong im lặng ngay cả trên CI** — suýt nữa thì hàng rào
+  vừa dựng đã vô hiệu.
+- `apps/web/src/lib/job-report.ts` + test — bất biến một câu: *job nào hỏng thì status phải khác 2xx*.
+
+**Modified files**
+- `packages/db/src/queries/rate-limits.ts` · `impersonation.ts` · `security.ts` (edit)
+- `packages/db/tests/integration.test.ts` (new) · `apps/web/src/lib/job-report.ts` (new)
+- `apps/web/src/app/api/internal/maintenance/route.ts` · `apps/web/tests/api.test.ts` (edit)
+- `.github/workflows/ci.yml` · `turbo.json` (edit)
+
+**Test status**
+- `pnpm build` → PASS (6/6) · `pnpm typecheck` → PASS
+- `pnpm test` → PASS (**531 passed**: core 383 · sdk 51 · adapters 45 · web 31 · db 21)
+- Endpoint kiểm chứng thật trên Postgres cục bộ: 401 khi thiếu token · 401 khi sai token ·
+  200 khi cả bốn job xanh · 500 khi một job hỏng · `curl -f` thoát mã 22.
+
+**Notes / decisions**
+- ADR-030.
+- Bài học lặp lại lần thứ hai trong dự án: **test xanh không phải là đã chạy.** Lần trước là
+  migration, lần này là bốn câu SQL. Cả hai lần, thứ phát hiện ra là chạy thật một lần.
+
+**Next task** → G1 còn lại: mail thật cho production, diễn tập restore trên Neon branch, Turso.
+
+
+### 2026-09-14 · v0.9.0 · fix(crypto): xoay khoá — quy trình đã viết ra nhưng không chạy được
+
+**Vấn đề tìm thấy khi đi đóng G1-2**
+
+Runbook §2 bảo: đặt khoá mới, chạy `scripts/rotate-encryption-key.py`, health check. Làm theo
+đúng như vậy sẽ **mất toàn bộ dữ liệu mã hoá**. Bốn lỗi chồng lên nhau:
+
+1. **Công cụ không làm việc mà runbook nói.** `rotate-encryption-key.py` chỉ thay một dòng trong
+   `.env.local`. Nó không đọc database, không mã hoá lại gì cả. Docstring của nó *hứa* rằng
+   "script từ chối chạy khi đã có dòng mã hoá" — trong mã không hề có kiểm tra đó. Nó ghi đè vô
+   điều kiện.
+2. **Runbook dặn tráo hai khoá cho nhau** — khoá mới vào `INFRA_MASTER_ENCRYPTION_KEY`, khoá cũ
+   vào `_V1`. Nhưng `masterKeyEnvVar(1)` trả về biến trần, nên mọi dòng đang ở phiên bản 1 sẽ đi
+   tìm khoá cũ ở đúng chỗ vừa bị đặt khoá mới vào. Hỏng sạch ngay lập tức.
+3. **`CURRENT_KEY_VERSION` là hằng số**, nên vòng xoay không bao giờ kết thúc được: dòng mới ghi
+   sau đó vẫn dùng khoá phiên bản 1 — khoá vừa định loại bỏ (ADR-027).
+4. **Runbook chỉ kiểm một trong bốn bảng.** Health check app chỉ chạm `infra_database_configs`.
+   `infra_signing_keys`, `infra_webhook_endpoints`, `infra_mfa_factors` hỏng âm thầm cho tới lần
+   đăng nhập / lần webhook / lần nhập mã MFA tiếp theo (ADR-029).
+
+**Deliverables**
+- `scripts/rotate-master-key.mjs` — mã hoá lại thật, cả bốn bảng, giữ nguyên AAD, `--dry-run`,
+  chạy lại được (bỏ qua dòng đã ở phiên bản đích), `WHERE encryption_key_version = <cũ>` để hai
+  lần chạy song song không đè nhau. Không in DSN, khoá, seed hay secret.
+- `scripts/drill-seed.mjs` + `scripts/drill-verify.mjs` — bài diễn tập, từ chối chạy nếu DSN không
+  phải localhost và không chứa chữ `drill`. `drill-verify` **không tin** báo cáo của công cụ xoay:
+  nó mở lại từng dòng bằng khoá mới *và* xác nhận khoá cũ không còn mở được dòng nào.
+- `packages/core/src/crypto.ts` — `currentKeyVersion()` đọc `INFRA_MASTER_ENCRYPTION_KEY_VERSION`
+  (mặc định 1); `masterKeyEnvVar` thành ánh xạ cố định (ADR-028); `assertMasterKey` kiểm khoá của
+  phiên bản sẽ **ghi**, không phải phiên bản 1.
+- `scripts/rotate-encryption-key.py` — giữ lại làm công cụ đặt khoá **lần đầu**, và giờ thật sự
+  từ chối ghi đè một khoá hợp lệ, kèm hướng dẫn sang công cụ đúng.
+- `vercel.json` + `scripts/install-cron.sh` — G1-3 thành file thật thay vì đoạn văn trong runbook.
+  Installer idempotent, và **không nhúng token vào crontab**: token nằm ở
+  `~/.config/unified-app-infra/internal-token` quyền 600, dòng cron `cat` ra khi chạy.
+- `docs/runbooks.md` §1 §2 §3 viết lại theo những gì công cụ thật sự làm.
+
+**BÀI DIỄN TẬP ĐÃ CHẠY** — đây mới là phần đáng kể
+
+Postgres 16 cục bộ, schema thật qua `pnpm db:migrate` (**31 bảng**, khớp đúng Neon), 9 dòng
+ciphertext trên cả bốn bảng, một factor WebAuthn không có seed để xác nhận cột null bị bỏ qua
+chứ không bị coi là hỏng.
+
+```
+xoay 1→2:   9/9 dòng, khoá cũ không mở được dòng nào
+chạy lại:   0 dòng cần xoay  (idempotent)
+xoay 2→3:   9/9 dòng          (chuỗi phiên bản)
+```
+
+**Bài diễn tập bắt được một lỗi thật trong chính công cụ.** Lần `--dry-run` đầu tiên báo
+`infra_signing_keys: FAIL 2/2`. Nguyên nhân: câu select đặt bí danh `kid as id` cho mọi bảng, còn
+AAD của signing key lại dựng từ `row.kid` → `signing-key:undefined`. Nếu chạy thẳng vào Master DB
+thật thay vì diễn tập trước, hai khoá ký sẽ mất, và triệu chứng là **mọi đăng nhập chết** — cách
+xa nguyên nhân đủ để mất vài giờ. Đây chính xác là lý do diễn tập tồn tại.
+
+**Test status**
+- `pnpm build` → PASS (6/6 packages)
+- `pnpm test` → PASS (**523 passed**, +5 — trong đó có test khẳng định `masterKeyEnvVar(1)` không
+  đổi nghĩa khi phiên bản hiện tại tăng, và test khẳng định phiên bản rác bị từ chối chứ không
+  âm thầm rơi về 1)
+- `pnpm typecheck` → PASS · `pnpm db:generate` → không có drift
+
+**Notes / decisions**
+- ADR-027, ADR-028, ADR-029.
+- G1-2 **đóng**: quy trình đã chạy thật một lần, trên schema thật, và đã sửa lỗi nó tìm ra.
+- G1-3 chuyển từ "chưa cài" sang "có một lệnh để cài" — cài thật vẫn cần chạy trên máy đích.
+- `pnpm verify:live` nay là cách kiểm bài diễn tập restore: biến môi trường thắng `.env.local`,
+  nên `INFRA_MASTER_DATABASE_URL="<dsn branch>" pnpm verify:live` chạy thẳng vào branch.
+
+**Next task** → G1 còn lại: mail thật cho production (cần Khoi chọn nhà cung cấp), diễn tập
+restore trên Neon branch, Turso.
+
+
+### 2026-09-14 · v0.8.0 · feat(proof): the platform actually works — live end-to-end evidence
+
+**🟢 G0 đóng hết. Đây là lúc dự án thôi là "test xanh" và thành "chạy được thật".**
+
+**Bằng chứng LIVE — `scripts/live-proof.mjs`, 11/11 phán quyết đúng**
+Chạy đúng đường mà `/api/v1/data/:resource` chạy — parse → quyết định → biên dịch → thực thi —
+nhưng đầu kia là **Master DB thật và database Neon của app con thật**, không phải adapter giả.
+Nó nạp `packages/core/dist` chứ không chép lại logic: nếu một hàm nào đó khác với hàm endpoint
+dùng thì bằng chứng này vô giá trị.
+
+```
+app: smoke-neon · provider neon
+DSN: giải mã OK (AES-256-GCM, AAD buộc theo dòng) — không in ra
+bảng live_proof_notes: 3 dòng (alice 2, bob 1) · policy: 4 bản ghi
+OK  alice thấy 2 dòng · bob thấy 1 dòng
+    câu lệnh alice: select "id","title" from "live_proof_notes" where (("owner_id" = $1)) limit $2
+OK  bob đòi dòng của alice: 0
+OK  người lạ: 0
+OK  tài nguyên không có policy → 1 = 0
+OK  bob chèn dòng mang tên alice: bị từ chối
+OK  bob chèn dòng bỏ trống owner_id: undecidable → fail closed
+OK  bob sửa dòng của alice: 0 dòng bị đổi
+```
+
+Dòng đáng nhìn nhất là câu lệnh của alice: **nó không hề nhắc tới `owner_id`**. Điều kiện đó do
+server AND vào. Đó chính là tính chất khiến khoá `pk_` an toàn khi nằm trong bundle trình duyệt, và
+giờ nó đã được chứng minh trên dữ liệu thật chứ không chỉ trong test.
+
+**Hai biến môi trường đã đặt**
+- `INFRA_MAIL_PROVIDER=console` — luồng khôi phục chạy được ở dev. **Production vẫn cần nhà cung
+  cấp thật**; `console` chỉ in ra log.
+- `INFRA_INTERNAL_TOKEN` — sinh ngẫu nhiên 288 bit. Hai endpoint theo lịch thôi từ chối mọi lời gọi.
+- `.env.local` đã sao lưu thành `.env.local.bak-<timestamp>` trước khi sửa.
+
+**🔴 Một giả định sai suốt nhiều phiên, nay đã sửa**
+Suốt từ đầu dự án mình ghi là "egress tới Neon bị chặn ở cả hai phía". **Sai.** VM Linux nối tới máy
+Khoi **với tới cổng database của Neon bình thường** — chỉ `console.neon.tech` (API quản trị qua
+HTTPS) mới bị chặn. Vì tin vào giả định đó nên nhiều việc lẽ ra làm được đã bị đẩy sang cho Khoi.
+Bài học: **kiểm tra một lần còn hơn mang một giả định đi suốt.**
+
+**Chi tiết kỹ thuật của script**
+- Viết `.mjs` chứ không `.mts`: `node_modules` trên mount là bản **darwin**, mà VM là **Linux**.
+  `tsx` kéo theo `esbuild` là binary gốc nên không chạy; `postgres-js` và các `dist/` của dự án là
+  JavaScript thuần nên chạy bình thường.
+- Đường dẫn `postgres` được **dò** chứ không ghi cứng version — một lần `pnpm up` là số đó đổi.
+- Lần chạy đầu **treo hết 180 giây**: Neon ngủ đông. Lần hai chạy **1,3 giây**. Và mình đã lặp lại
+  đúng lỗi cũ của phiên đầu — `| tail` giữ toàn bộ output tới khi tiến trình kết thúc, nên treo ở
+  đâu cũng không nhìn thấy. Phải ghi thẳng ra file.
+
+**Modified files**
+- `scripts/live-proof.mjs` (new) · `.env.local` (edit, đã sao lưu)
+
+**Test status**
+- `pnpm build` → PASS (6/6) · `pnpm test` → PASS (518/518)
+- **LIVE: 11/11 phán quyết đúng trên Neon thật.**
+
+**Notes / decisions**
+- Bài chứng minh chạy trên app `smoke-neon` sẵn có, dùng bảng riêng `live_proof_notes` để không
+  chạm vào thứ gì khác. `node scripts/live-proof.mjs --cleanup` xoá sạch bảng và 4 policy đó.
+- Giữ lại dữ liệu chứng minh sau lần chạy này, để Khoi mở Dashboard `/apps/<id>/access` là **nhìn
+  thấy policy thật và mảnh SQL nó biên dịch ra** thay vì phải tin lời kể.
+
+**Next task** → G1: nhà cung cấp mail thật khi deploy · diễn tập backup và xoay khoá · cài cron.
+
+### 2026-09-14 · v0.7.4 · chore(ops): verify-live, và bằng chứng LIVE đầu tiên của dự án
+
+**Deliverables**
+- `scripts/verify-live.mts` + `pnpm verify:live` — tồn tại vì **hai bên không nhìn thấy cùng một
+  thứ**: egress tới Neon bị chặn phía Claude, nên câu "đã chạy xong" không kiểm chứng được từ xa.
+  Script chạy ở máy Khoi và ghi log; **log là bằng chứng, không phải lời kể.**
+- Log **che dữ liệu nhạy cảm** theo đúng quy tắc của dự án: chỉ tên bảng, số đếm, số migration.
+  Không connection string, không khoá, không email, không giá trị của bất kỳ dòng nào.
+- `packages/db/src/queries/inspect.ts` — SQL thô chuyển vào đây **vì ADR-009**: mọi truy vấn Drizzle
+  sống trong `@infra/db`. Bản đầu của script import thẳng `drizzle-orm` từ gốc repo và **vỡ ngay**
+  (`ERR_MODULE_NOT_FOUND` — gói đó không phải dependency của gốc). Mình đã viết ra luật rồi tự phá nó.
+
+**🟢 Kết quả kiểm chứng — 2026-09-14T05:52Z**
+```
+tables: 31 có mặt, kỳ vọng tối thiểu 31
+OK    đủ toàn bộ bảng — migration 0000→0011 đã apply
+migrations đã ghi nhận: 12
+infra_apps: 2 · infra_api_keys: 4 · infra_database_configs: 4 · infra_policies: 0
+mail: CHƯA cấu hình
+INFRA_INTERNAL_TOKEN: CHƯA đặt
+```
+
+**Phát hiện quan trọng hơn cả con số bảng: `infra_policies: 0`**
+Đã có 2 app và 4 database config, nhưng **không có policy nào**. Nghĩa là mọi request qua
+`/api/v1/data` đang bị từ chối sạch. Đây **không phải lỗi** — đó là mặc định từ chối đang chạy đúng
+như thiết kế, và là lý do một app mới đọc không ra gì cho tới khi có người viết policy. Nhưng nó
+chính là thứ đang chặn G0-4: không thể có bằng chứng LIVE khi chưa có luật nào để chứng minh.
+
+**Hai biến môi trường trống, và hậu quả thật của chúng**
+- `INFRA_MAIL_PROVIDER` trống → ai quên mật khẩu sẽ nhận lỗi. Ở dev chỉ cần `console`.
+- `INFRA_INTERNAL_TOKEN` trống → **cả hai endpoint theo lịch đang từ chối mọi lời gọi**. Webhook sẽ
+  xếp hàng mãi trong `infra_webhook_deliveries`, session mạo danh hết hạn vẫn đọc ra là đang mở, và
+  **không có gì báo lỗi** — đúng kiểu hỏng im lặng mà lịch chạy sinh ra để tránh.
+
+**Modified files**
+- `scripts/verify-live.mts` (new) · `packages/db/src/queries/inspect.ts` (new) · `queries/index.ts` · `package.json` (edit)
+
+**Test status**
+- `pnpm build` → PASS (6/6) · `pnpm test` → PASS (518/518) · không có migration mới.
+
+**Next task** → `G0-4`: viết policy (hoặc chạy `examples/notes-app` setup), đặt `INFRA_MAIL_PROVIDER`
+và `INFRA_INTERNAL_TOKEN`, rồi chạy lại `verify:live` để có bằng chứng cho cả bốn.
 
 ### 2026-09-14 · v0.7.3 · feat(ops): shared rate-limit counter and a real mail transport
 

@@ -5,7 +5,7 @@
  * ship is that it refuses to become a platform admin, refuses without a reason worth reading,
  * refuses to run longer than an hour, and refuses to start a second one while the first is open.
  */
-import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lte } from 'drizzle-orm';
 import { InfraError } from '@infra/core';
 import type { MasterDatabase } from '../client.js';
 import {
@@ -129,7 +129,11 @@ export async function expireImpersonations(db: MasterDatabase, now: Date = new D
     .where(
       and(
         isNull(infraImpersonationSessions.endedAt),
-        sql`${infraImpersonationSessions.expiresAt} <= ${now}`,
+        // `lte`, not a raw sql template: inside a template the Date loses the column's type mapper
+        // and reaches Postgres as `Mon Sep 14 2026 …`, which it cannot parse as a timestamptz. The
+        // statement threw on every run, so this sweep never closed a single expired session —
+        // exactly the failure this file's header warns about.
+        lte(infraImpersonationSessions.expiresAt, now),
       ),
     )
     .returning({ id: infraImpersonationSessions.id });

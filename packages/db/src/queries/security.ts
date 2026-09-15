@@ -5,7 +5,7 @@
  * what lets the lockout curve be tested exhaustively without a database, and keeps the SQL here
  * boring enough to read in one sitting.
  */
-import { and, eq, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import {
   afterFailure,
   evaluateAttempt,
@@ -224,7 +224,9 @@ export async function consumeRecoveryToken(
       and(
         eq(infraRecoveryTokens.tokenHash, hashRecoveryToken(raw)),
         isNull(infraRecoveryTokens.usedAt),
-        sql`${infraRecoveryTokens.expiresAt} > ${now}`,
+        // `gt`, not a raw template — see the note in impersonation.ts: a Date inside a template
+        // reaches Postgres unparseable, and this one guards the account-recovery lookup.
+        gt(infraRecoveryTokens.expiresAt, now),
       ),
     )
     .returning();

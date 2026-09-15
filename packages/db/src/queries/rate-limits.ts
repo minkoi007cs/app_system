@@ -38,6 +38,14 @@ export async function consumeShared(
   const bucket = rateLimitBucket(identity);
   const windowEndsAt = new Date(now.getTime() + windowMs);
 
+  // A raw `sql` template hands its parameters straight to the driver, WITHOUT the column's type
+  // mapper. A `Date` interpolated here therefore arrives as `Mon Sep 14 2026 06:39:44 GMT+0000
+  // (Coordinated Universal Time)` — which Postgres cannot parse as a timestamptz, so the whole
+  // statement throws. Above, in `.values()`, drizzle knows the column and converts correctly; it
+  // is only inside the template that the type is lost. So pass ISO text and cast it explicitly.
+  const nowSql = sql`${now.toISOString()}::timestamptz`;
+  const windowEndsAtSql = sql`${windowEndsAt.toISOString()}::timestamptz`;
+
   const [row] = await db
     .insert(infraRateLimits)
     .values({ bucket, count: 1, windowEndsAt })
@@ -45,8 +53,8 @@ export async function consumeShared(
       target: infraRateLimits.bucket,
       set: {
         // Window passed → start a new one at 1. Still open → add one.
-        count: sql`case when ${infraRateLimits.windowEndsAt} <= ${now} then 1 else ${infraRateLimits.count} + 1 end`,
-        windowEndsAt: sql`case when ${infraRateLimits.windowEndsAt} <= ${now} then ${windowEndsAt} else ${infraRateLimits.windowEndsAt} end`,
+        count: sql`case when ${infraRateLimits.windowEndsAt} <= ${nowSql} then 1 else ${infraRateLimits.count} + 1 end`,
+        windowEndsAt: sql`case when ${infraRateLimits.windowEndsAt} <= ${nowSql} then ${windowEndsAtSql} else ${infraRateLimits.windowEndsAt} end`,
       },
     })
     .returning();

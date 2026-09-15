@@ -42,10 +42,44 @@ export interface DecryptOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+/**
+ * Which key version NEW ciphertext is written with.
+ *
+ * A constant would make rotation impossible to finish. Rotation re-encrypts existing rows to a
+ * higher version, but anything written afterwards — a connection string added in the dashboard, a
+ * signing key rolled by the scheduler — would still be written at version 1, with the key rotation
+ * was trying to retire. Every rotation would leave the old key permanently load-bearing, which is
+ * the same as not rotating.
+ *
+ * So the deployment declares it. Default 1, which is what every existing deployment already is.
+ */
+export const MASTER_KEY_VERSION_ENV_VAR = 'INFRA_MASTER_ENCRYPTION_KEY_VERSION';
+
+export function currentKeyVersion(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = (env[MASTER_KEY_VERSION_ENV_VAR] ?? '').trim();
+  if (raw === '') return CURRENT_KEY_VERSION;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1_000) {
+    throw new InfraError(
+      'CONFIG_INVALID',
+      `${MASTER_KEY_VERSION_ENV_VAR} must be a whole number ≥ 1`,
+      { details: { source: MASTER_KEY_VERSION_ENV_VAR } },
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Maps a key version to the env var holding that key.
+ *
+ * The mapping is fixed, deliberately: version 1 is always the bare variable, every later version
+ * is suffixed. It must not be relative to whichever version is current, because then bumping the
+ * current version would silently change which variable an *existing* ciphertext reads its key
+ * from — every stored row would start decrypting against the wrong key at the same moment.
+ */
 export function masterKeyEnvVar(keyVersion: number = CURRENT_KEY_VERSION): string {
-  return keyVersion === CURRENT_KEY_VERSION
-    ? MASTER_KEY_ENV_VAR
-    : `${MASTER_KEY_ENV_VAR}_V${keyVersion}`;
+  return keyVersion === 1 ? MASTER_KEY_ENV_VAR : `${MASTER_KEY_ENV_VAR}_V${keyVersion}`;
 }
 
 /** Validates a hex master key without ever echoing its value. */
@@ -73,9 +107,15 @@ export function loadMasterKey(
   return parseMasterKey(raw, source);
 }
 
-/** Call once at boot so a misconfigured deployment fails immediately. */
+/**
+ * Call once at boot so a misconfigured deployment fails immediately.
+ *
+ * Checks the key for the version this deployment *writes* with, not version 1 — a deployment that
+ * declared `INFRA_MASTER_ENCRYPTION_KEY_VERSION=2` and forgot the `_V2` key would otherwise boot
+ * cleanly and fail on the first write instead.
+ */
 export function assertMasterKey(env: NodeJS.ProcessEnv = process.env): Buffer {
-  return loadMasterKey(CURRENT_KEY_VERSION, env);
+  return loadMasterKey(currentKeyVersion(env), env);
 }
 
 /** Binds a ciphertext to the exact row that owns it. */
@@ -98,8 +138,9 @@ export function encryptSecret(
   aad: string,
   options: EncryptOptions = {},
 ): EncryptedPayload {
-  const keyVersion = options.keyVersion ?? CURRENT_KEY_VERSION;
-  const key = resolveKey(options.key, keyVersion, options.env ?? process.env);
+  const env = options.env ?? process.env;
+  const keyVersion = options.keyVersion ?? currentKeyVersion(env);
+  const key = resolveKey(options.key, keyVersion, env);
   const iv = randomBytes(IV_BYTES);
 
   try {

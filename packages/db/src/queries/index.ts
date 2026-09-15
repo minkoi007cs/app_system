@@ -19,3 +19,4 @@ export * from './webhooks.js';
 export * from './provisioning.js';
 export * from './impersonation.js';
 export * from './rate-limits.js';
+export * from './inspect.js';

@@ -4,6 +4,7 @@ import {
   assertMasterKey,
   buildAad,
   CURRENT_KEY_VERSION,
+  currentKeyVersion,
   decryptSecret,
   encryptSecret,
   InfraError,
@@ -113,6 +114,53 @@ describe('master key handling', () => {
   it('names versioned env vars for rotation', () => {
     expect(masterKeyEnvVar()).toBe('INFRA_MASTER_ENCRYPTION_KEY');
     expect(masterKeyEnvVar(2)).toBe('INFRA_MASTER_ENCRYPTION_KEY_V2');
+  });
+
+  it('maps a version to the same env var regardless of which version is current', () => {
+    // The invariant that makes rotation survivable: bumping the current version must not change
+    // where an ALREADY-STORED ciphertext looks for its key. If version 1 started resolving to
+    // _V1 the moment version 2 became current, every existing row would break at once.
+    expect(masterKeyEnvVar(1)).toBe('INFRA_MASTER_ENCRYPTION_KEY');
+    expect(masterKeyEnvVar(3)).toBe('INFRA_MASTER_ENCRYPTION_KEY_V3');
+  });
+
+  it('defaults to version 1 and honours the declared version', () => {
+    expect(currentKeyVersion({} as NodeJS.ProcessEnv)).toBe(1);
+    expect(
+      currentKeyVersion({ INFRA_MASTER_ENCRYPTION_KEY_VERSION: ' 2 ' } as NodeJS.ProcessEnv),
+    ).toBe(2);
+  });
+
+  it('refuses a nonsense version rather than falling back to 1', () => {
+    // Falling back would write new rows with the retired key while the operator believes the
+    // rotation finished — the failure mode rotation exists to prevent.
+    for (const raw of ['0', '-1', '1.5', 'two']) {
+      expect(() =>
+        currentKeyVersion({ INFRA_MASTER_ENCRYPTION_KEY_VERSION: raw } as NodeJS.ProcessEnv),
+      ).toThrowError(/whole number/);
+    }
+  });
+
+  it('writes new ciphertext at the declared version, not always version 1', () => {
+    const env = {
+      INFRA_MASTER_ENCRYPTION_KEY: KEY.toString('hex'),
+      INFRA_MASTER_ENCRYPTION_KEY_V2: OTHER_KEY.toString('hex'),
+      INFRA_MASTER_ENCRYPTION_KEY_VERSION: '2',
+    } as NodeJS.ProcessEnv;
+
+    const payload = encryptSecret(DSN, AAD, { env });
+    expect(payload.keyVersion).toBe(2);
+    expect(decryptSecret(payload, AAD, { key: OTHER_KEY })).toBe(DSN);
+    // and the retired key must NOT open it
+    expect(() => decryptSecret(payload, AAD, { key: KEY })).toThrowError();
+  });
+
+  it('boots against the key it will actually write with', () => {
+    const halfRotated = {
+      INFRA_MASTER_ENCRYPTION_KEY: KEY.toString('hex'),
+      INFRA_MASTER_ENCRYPTION_KEY_VERSION: '2',
+    } as NodeJS.ProcessEnv;
+    expect(() => assertMasterKey(halfRotated)).toThrowError(/INFRA_MASTER_ENCRYPTION_KEY_V2/);
   });
 
   it('supports decrypting with a rotated key version', () => {

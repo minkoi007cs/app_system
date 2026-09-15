@@ -5,7 +5,11 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
-    "test": { "dependsOn": ["^build"], "outputs": [] },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "env": ["INFRA_TEST_DATABASE_URL", "CI"]
+    },
     "typecheck": { "dependsOn": ["^build"] },
     "lint": {},
     "dev": { "cache": false, "persistent": true }

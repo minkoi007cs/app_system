@@ -18,6 +18,7 @@ import {
 import { db } from '@/lib/db';
 import { assertInternalToken } from '@/lib/internal-auth';
 import { flushNow } from '@/lib/decision-log';
+import { describeFailures, statusForJobs, type JobResult } from '@/lib/job-report';
 import { jsonOk, newRequestId, toErrorResponse } from '@/lib/response';
 
 export const runtime = 'nodejs';
@@ -25,12 +26,6 @@ export const dynamic = 'force-dynamic';
 
 /** Delivered and dropped webhook rows older than this carry no information worth the storage. */
 export const DELIVERY_RETENTION_DAYS = 14;
-
-interface JobResult {
-  job: string;
-  ok: boolean;
-  detail: number | string;
-}
 
 async function run(job: string, work: () => Promise<number>): Promise<JobResult> {
   try {
@@ -64,7 +59,23 @@ export async function POST(request: Request): Promise<Response> {
     // next request that happens to arrive.
     flushNow();
 
-    return jsonOk({ results, ranAt: new Date().toISOString() }, requestId);
+    // A failed job must reach the HTTP status, not only the body.
+    //
+    // The caller is cron, and the runbook tells cron to use `curl -fsS` precisely so that a bad
+    // response becomes a non-zero exit code. A 200 carrying `{"job":"impersonations","ok":false}`
+    // defeats that: curl is happy, cron is silent, and a job that fails every hour forever is
+    // invisible. That is what happened — `expireImpersonations` threw on every single run for as
+    // long as the endpoint existed, and the only reason anyone found out was calling it by hand
+    // and reading the body.
+    //
+    // The per-job results still come back in full, so a 500 here says *which* job and not merely
+    // that something went wrong. The jobs that did succeed have already committed; this status is
+    // a report, not a rollback.
+    const status = statusForJobs(results);
+    const failures = describeFailures(results);
+    if (failures !== '') console.error(`[maintenance] ${failures}`);
+
+    return jsonOk({ results, ranAt: new Date().toISOString() }, requestId, { status });
   } catch (error) {
     return toErrorResponse(error, requestId);
   }

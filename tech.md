@@ -247,7 +247,7 @@ code server (không Drizzle, không Better Auth server) — nó chỉ gọi HTTP
 
 ## 4. Master Database Schema (Drizzle ORM · PostgreSQL)
 
-> **25 bảng, migration 0000 → 0010.** Bốn bảng nền tảng được mô tả chi tiết dưới đây; phần còn lại
+> **31 bảng, migration 0000 → 0011.** Bốn bảng nền tảng được mô tả chi tiết dưới đây; phần còn lại
 > thêm vào ở Phase 5–7 và định nghĩa nằm trong `packages/db/src/schema/`.
 
 ### 4.0 Toàn bộ bảng, theo phase đã sinh ra chúng
@@ -762,3 +762,7 @@ không chạy nửa vời.
 | ADR-025 | **Rate limit: bộ đếm chung là nguồn sự thật, lớp cục bộ chỉ được từ chối** | Bộ đếm trong bộ nhớ tiến trình trên serverless nhân mọi hạn mức lên theo số instance mà **không báo lỗi gì** — trần chỉ lặng lẽ cao hơn con số trong config. Lớp cục bộ giữ lại vì lưu lượng lạm dụng là thứ nó đuổi được miễn phí, nhưng nó **không bao giờ được cho qua**: cho qua là nâng trần toàn cục. | 2026-09-14 |
 | ADR-026 | **Không cấu hình mailer thì ném lỗi, không im lặng bỏ qua** | Luồng khôi phục là chỗ duy nhất mà gửi hỏng không phân biệt được với bị tấn công, từ phía người dùng. Một transport báo thành công rồi vứt thư đi tệ hơn một transport hỏng nhìn thấy được. | 2026-09-14 |
 | ADR-024 | **Không có đọc ẩn danh** | Không có access token và khoá không thuộc service account → từ chối. Đọc ẩn danh là thứ app phải bật có chủ đích, và cơ chế đó chưa tồn tại, nên câu trả lời an toàn là không. | 2026-09-14 |
+| ADR-027 | **Phiên bản khoá mã hoá do deployment khai báo, không phải hằng số** | `CURRENT_KEY_VERSION = 1` cố định làm cho việc xoay khoá **không bao giờ kết thúc được**: xoay xong mọi dòng sang phiên bản 2, nhưng dòng *mới* — một database config vừa thêm trong dashboard, một khoá ký vừa xoay — vẫn được ghi bằng khoá phiên bản 1, tức là khoá vừa định loại bỏ. Khoá cũ vĩnh viễn còn cần thiết, nghĩa là chưa xoay. Nay `INFRA_MASTER_ENCRYPTION_KEY_VERSION` quyết định phiên bản dùng để **ghi**, mặc định 1. | 2026-09-14 |
+| ADR-028 | **Ánh xạ phiên bản → biến môi trường là cố định, không tương đối** | Phiên bản 1 luôn là biến trần `INFRA_MASTER_ENCRYPTION_KEY`, mọi phiên bản sau đều có hậu tố. Bản cũ so với `CURRENT_KEY_VERSION`, nên khoảnh khắc phiên bản hiện tại lên 2 thì phiên bản 1 đột nhiên đi tìm khoá ở `_V1` — **mọi dòng đang lưu hỏng cùng lúc**, vì một thay đổi cấu hình không liên quan gì tới chúng. | 2026-09-14 |
+| ADR-029 | **Xoay khoá là mã hoá lại từng dòng trên bốn bảng, không phải đổi một biến** | Bốn bảng mang ciphertext: DSN app con, private key ES256, secret webhook, seed TOTP. Runbook cũ chỉ dặn health check app sau khi xoay — kiểm một trong bốn; ba cái kia hỏng âm thầm cho tới lần đăng nhập, lần webhook, lần nhập mã MFA tiếp theo. Công cụ giữ nguyên AAD (khoá đổi, ngữ cảnh thì không), ghi từng dòng một, và chạy lại được. | 2026-09-14 |
+| ADR-030 | **Một phần bộ test phải chạy trên Postgres thật** | 518 test xanh trong khi `expireImpersonations` và bộ đếm rate limit dùng chung **chưa từng chạy được lần nào**: một `Date` trong template `sql` thô mất type mapper của cột và tới Postgres dưới dạng không parse được. Driver giả không bao giờ từ chối một tham số sai kiểu, nên không có mock nào bắt được loại lỗi này. CI nay chạy `postgres:16` như một service; `packages/db/tests/integration.test.ts` tự bỏ qua khi không có database, nhưng hiện ra là "skipped" chứ không biến mất. | 2026-09-14 |

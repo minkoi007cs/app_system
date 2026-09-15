@@ -69,7 +69,7 @@ key above safe to ship inside a browser bundle.
 
 ```
 packages/core       crypto, API keys, JWT, TOTP, RBAC/ABAC, query DSL + compiler, throttling
-packages/db         Drizzle schema for the Master DB (25 tables), client, typed queries
+packages/db         Drizzle schema for the Master DB (31 tables), client, typed queries
 packages/adapters   DatabaseAdapter contract, postgres + libsql drivers, resolver, provisioning
 packages/auth       Better Auth instance, tokens, passkeys, access checks, the data gateway
 packages/sdk        @infra/sdk — browser client, server client, query builder, token manager
@@ -93,7 +93,7 @@ string, and there is no recovery path if it is lost. Then add `INFRA_MASTER_DATA
 Neon project and run:
 
 ```bash
-pnpm db:migrate     # 11 migrations, 25 tables
+pnpm db:migrate     # 12 migrations, 31 tables
 pnpm dev            # dashboard on http://localhost:3000
 ```
 
@@ -112,10 +112,38 @@ pnpm db:studio   # browse the Master DB
 
 ## Status
 
-All eight phases are implemented — 503 tests, 6/6 packages building. What is **not** yet done is
-running it in anger: the four newest migrations have not been applied to the live Neon project, and
-no mail transport is configured, so password recovery links are logged rather than sent. See the
-"v1.0 readiness" section of `process.md` for the honest gap list.
+All eight phases are implemented — **536 tests**, 6/6 packages building — and the platform has been
+exercised against live infrastructure rather than only against mocks. All twelve migrations are
+applied to the Neon Master DB (31 tables), and `scripts/live-proof.mjs` drives a real tenant
+database through the rules engine: eleven checks covering per-owner read isolation, a resource with
+no policy compiling to `1 = 0`, an insert forged under another user's name, and an update reaching
+across owners. All eleven land correctly.
+
+Two things found by running the system rather than testing it, both since fixed:
+
+- `expireImpersonations` and the shared rate-limit counter had **never worked** — a `Date`
+  interpolated into a raw `sql` template loses the column's type mapper and reaches Postgres as
+  unparseable text. 518 tests were green because nothing in the suite spoke to a real Postgres. CI
+  now runs one, and `packages/db/tests/integration.test.ts` is the guard.
+- `/api/internal/maintenance` returned HTTP 200 while reporting a failed job in the body, which
+  defeats the `curl -f` the cron runbook depends on. A failed job is now a 500.
+
+The encryption-key rotation drill has been run end to end (four tables, 9 ciphertexts, versions
+1→2→3) and caught a real bug in the rotation tool itself. `scripts/rotate-master-key.mjs` is the
+tool; `docs/runbooks.md` §2 is the procedure.
+
+Reproduce any of it:
+
+```bash
+pnpm verify:live                          # schema + migration state, redacted log to logs/
+node scripts/live-proof.mjs               # rules enforced on real data
+INFRA_TEST_DATABASE_URL=... pnpm test     # includes the integration suite
+```
+
+What remains before a v1.0 tag is operational, not architectural: a real mail provider for
+production (`INFRA_MAIL_PROVIDER=console` only prints the recovery link to a terminal), a backup
+restore drill, the maintenance cron installed on the target host, and Turso configured once. See
+the "v1.0 readiness" section of `process.md`, and `docs/runbooks.md` for the procedures.
 
 ## License
 

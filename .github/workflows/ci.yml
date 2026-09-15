@@ -15,12 +15,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Deliberately empty. Every test in this repo runs without a database, a network call or a
-    # secret — the adversarial suite, the crypto vectors and the SDK transport tests all use
-    # injected fetch implementations. If a test ever needs a credential here, that is a sign the
-    # test has stopped being a unit test rather than a sign CI needs secrets.
+    # No secrets, still. Every test runs against either an injected fake or the throwaway Postgres
+    # below — never a real credential. A test that needs one has stopped being a test CI can run.
+    #
+    # The database service is not here to make the unit tests heavier. It is here because on
+    # 2026-09-14 two functions were found that had NEVER worked — `expireImpersonations` and the
+    # shared rate-limit counter — while 518 tests were green, because nothing in the suite ever
+    # spoke to a real Postgres. A `Date` inside a raw `sql` template reaches the driver without the
+    # column's type mapper and arrives as text Postgres cannot parse. Only a real server says so.
     env:
       CI: 'true'
+      INFRA_TEST_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/infra_test'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: infra_test
+        ports:
+          - 5432:5432
+        # Without the health check the first query races the server's startup and fails as if the
+        # code were broken.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +61,13 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Applies 0000→latest to the throwaway database. Also a real check in its own right: a
+      # migration that does not apply cleanly from empty fails here rather than in production.
+      - name: Apply migrations to the test database
+        run: INFRA_MASTER_DATABASE_URL="$INFRA_TEST_DATABASE_URL" pnpm db:migrate
+
+      # Includes packages/db/tests/integration.test.ts, which skips itself when
+      # INFRA_TEST_DATABASE_URL is unset — so this stays runnable on a laptop with no database.
       - name: Test
         run: pnpm test
 
